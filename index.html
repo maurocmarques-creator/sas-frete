@@ -578,19 +578,21 @@ async function renderTabelas() {
       </div></div>`:''}
     <div class="card" style="padding:0"><div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Nome</th><th>Cód. Brudam</th><th>Cliente</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
+        <thead><tr><th>Nome</th><th>Cód. Brudam</th><th>Cliente</th><th>Vigência</th><th>ICMS</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody>${tabelas.length?tabelas.map(t=>`
           <tr>
             <td class="fw-600 mono">${t.nome}</td>
             <td class="mono">${t.codigo_brudam||'—'}</td>
             <td>${clienteMap[t.cliente_id]||'—'}</td>
             <td>${fmtDate(t.vigencia_inicio)} → ${fmtDate(t.vigencia_fim)}</td>
+            <td><span class="badge ${t.icms_por_dentro===false?'badge-blue':'badge-gray'}" title="${t.icms_por_dentro===false?'ICMS somado ao frete líquido':'ICMS incluso no valor do frete (padrão CT-e)'}">
+              ${t.icms_por_dentro===false?'Por fora':'Por dentro'}</span></td>
             <td>${vigBadge(t)}</td>
             <td><div class="actions">
               <button class="btn btn-sm btn-secondary" onclick="modalTabela('${t.id}')">Editar</button>
               <button class="btn btn-sm btn-primary" onclick="nav('trechos',{tabelaId:'${t.id}',tabelaNome:${JSON.stringify(t.nome)},clienteNome:${JSON.stringify(clienteMap[t.cliente_id]||'')}})">Trechos</button>
             </div></td>
-          </tr>`).join(''):`<tr><td colspan="6"><div class="empty"><p>Nenhuma tabela cadastrada.</p></div></td></tr>`}
+          </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><p>Nenhuma tabela cadastrada.</p></div></td></tr>`}
         </tbody>
       </table>
     </div></div>`;
@@ -629,6 +631,16 @@ async function modalTabela(id=null){
         <div class="form-group"><label>Vigência — fim *</label>
           <input type="date" id="t-fim" value="${t?.vigencia_fim||''}"></div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>ICMS — Cálculo</label>
+          <select id="t-icms-pd">
+            <option value="1" ${(t?.icms_por_dentro!==false)?'selected':''}>Por dentro (ICMS incluso no frete — padrão CT-e)</option>
+            <option value="0" ${(t?.icms_por_dentro===false)?'selected':''}>Por fora (ICMS somado ao frete líquido)</option>
+          </select>
+          <small style="color:var(--gray-400);font-size:11px">Por dentro: Total = Base ÷ (1 − alíq.) &nbsp;|&nbsp; Por fora: Total = Base × (1 + alíq.)</small>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       ${t?`<button class="btn btn-danger" onclick="deleteTabela('${t.id}')">Excluir</button>`:''}
@@ -647,7 +659,8 @@ async function saveTabela(id){
   if(fim<ini){toast('Data fim deve ser >= data início','danger');return;}
   const data={nome,codigo_brudam:document.getElementById('t-cod').value.trim()||null,
               cliente_id:cli,modalidade:document.getElementById('t-mod').value,
-              vigencia_inicio:ini,vigencia_fim:fim};
+              vigencia_inicio:ini,vigencia_fim:fim,
+              icms_por_dentro:document.getElementById('t-icms-pd').value==='1'};
   try{ if(id) await DB.update('tabelas_frete',id,data); else await DB.insert('tabelas_frete',data);
     closeModal(); toast('Tabela salva'); renderTabelas(); }
   catch(e){toast(e.message||'Erro','danger');}
@@ -1062,7 +1075,10 @@ function calcularFrete(trecho,faixas,linha){
   const tda=parseFloat(trecho.tda)||0;
   const sub=freteBase+adv+gr+ped+tda;
   const icm=(parseFloat(trecho.icms)||0)/100;
-  const tot=icm>0?sub/(1-icm):sub;
+  // Por dentro (padrão CT-e): Total = Base ÷ (1 − alíq.)  →  ICMS já incluso no valor
+  // Por fora: Total = Base × (1 + alíq.)  →  ICMS somado ao frete líquido
+  const porDentro=trecho.icms_por_dentro!==false;
+  const tot=icm>0?(porDentro?sub/(1-icm):sub*(1+icm)):sub;
   return{freteBase:r2(freteBase),adValorem:r2(adv),gris:r2(gr),pedagio:r2(ped),tda:r2(tda),subtotal:r2(sub),freteCalculado:r2(tot),det};
 }
 function r2(v){return Math.round(v*100)/100;}
@@ -1211,7 +1227,7 @@ async function executarAuditoria(){
           detalhes:{msg:`Rota ${l.uf_origem}→${l.uf_destino} não em ${tab.nome}`}});
         divergentes++;totCob+=parseFloat(l.valor_frete_cobrado)||0;continue;
       }
-      const trecho=tLista[0];
+      const trecho={...tLista[0],icms_por_dentro:tab.icms_por_dentro!==false};
       const faixas=todasF.filter(f=>f.trecho_id===trecho.id).sort((a,b)=>parseFloat(a.peso_de)-parseFloat(b.peso_de));
       const calc=calcularFrete(trecho,faixas,l);
       if(calc.erro){
@@ -1690,7 +1706,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 19:45 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:15 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
