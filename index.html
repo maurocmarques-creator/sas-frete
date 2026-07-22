@@ -563,6 +563,7 @@ async function renderTabelas() {
         <div class="page-subtitle">${fNome?'Cliente: '+fNome:tabelas.length+' tabela(s)'}</div></div>
       <div class="flex-gap">
         ${fCliente?`<button class="btn btn-secondary" onclick="nav('tabelas')">Ver todas</button>`:''}
+        <button class="btn btn-success" onclick="importarTabelaExcel('${fCliente||''}')">📥 Importar Excel</button>
         <button class="btn btn-primary" onclick="modalTabela()">+ Nova tabela</button>
       </div>
     </div>
@@ -1334,6 +1335,321 @@ async function exportarResultado(){
 }
 
 // ═══════════════════════════════════════════════════════════
+// IMPORTAR TABELA DE FRETE VIA EXCEL
+// ═══════════════════════════════════════════════════════════
+
+// Normaliza cabeçalho para comparação
+function normH(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');}
+
+// Mapeamento de padrões para campos conhecidos
+const CAMPO_PATTERNS = [
+  {field:'uf_origem',  label:'UF Origem',       patterns:['uforigem','origem','ufori','ori','from','ufde','deuf']},
+  {field:'uf_destino', label:'UF Destino',       patterns:['ufdestino','destino','ufdest','dst','to','ufpara','para']},
+  {field:'pct_nf',     label:'% sobre NF',       patterns:['pctnf','porcentagemnf','percentualnf','nf','advalorem','advaloremfretevalor','pctnota','percentualnota']},
+  {field:'tarifa_m3',  label:'Tarifa m³',         patterns:['tarifam3','tarifam','m3','metro','cubico','m3valor','volumetrico']},
+  {field:'frete_minimo',label:'Frete Mínimo',    patterns:['freteminimo','minimo','fretemin','fretmin','valorminimo','min']},
+  {field:'peso_minimo',label:'Peso Mínimo (kg)', patterns:['pesominimo','pesomin','pesominkg','pesolimite','kgminimo']},
+  {field:'tarifa_excedente',label:'Excedente/kg',patterns:['excedente','tarifaexcedente','exckg','excedkg','valorexcedente','kgexcedente','exced']},
+  {field:'fator_cubagem',label:'Fator Cubagem',  patterns:['fatorcubagem','cubagem','fator','divisorcubagem']},
+  {field:'icms',       label:'ICMS (%)',          patterns:['icms','imposticms','aliquotaicms','icmspct']},
+  {field:'gris',       label:'GRIS (%)',          patterns:['gris','grispct','seguro','gerenciarisco']},
+  {field:'pedagio',    label:'Pedágio (R$)',       patterns:['pedagio','pedagiokg','pedkg','toll']},
+  {field:'tda',        label:'TDA (R$)',           patterns:['tda','taxadescargaautomatica','taxadescarga']},
+  // faixas de peso: detectadas por "peso_de / peso_ate" ou cabeçalhos numéricos como "0-50", "50-100"
+  {field:'peso_de',    label:'Faixa De (kg)',     patterns:['pesode','de','pesoinicial','inicio','kgde']},
+  {field:'peso_ate',   label:'Faixa Até (kg)',    patterns:['pesoate','ate','pesofinal','fim','kgate']},
+  {field:'tarifa_kg',  label:'Tarifa/kg',         patterns:['tarifakg','valorkg','precokg','rkg','kg']},
+];
+
+// Tenta auto-detectar tipo da tabela baseado nos campos encontrados
+function detectarTipo(mapa){
+  const campos=Object.values(mapa);
+  if(campos.includes('pct_nf') && !campos.includes('tarifa_excedente') && !campos.includes('tarifa_m3')) return 'pct_nf';
+  if(campos.includes('tarifa_m3')) return 'm3';
+  if(campos.includes('tarifa_excedente') || campos.includes('peso_minimo')) return 'min_excedente';
+  if(campos.includes('tarifa_kg') || campos.includes('peso_de') || campos.includes('peso_ate')) return 'faixas';
+  return 'pct_nf';
+}
+
+// Detecta se o cabeçalho é uma faixa de peso "0-50", "50-100", "acima de 500" etc.
+function detectarFaixaHeader(h){
+  const n=normH(h);
+  const m1=n.match(/^(\d+)a?t?e?(\d+)$/); if(m1) return {de:+m1[1],ate:+m1[2]};
+  const m2=n.match(/^(\d+)(\d+)$/); if(m2&&m2[1].length<=5) return null;
+  const m3=String(h).match(/(\d+)\s*[-–a]\s*(\d+)/); if(m3) return {de:+m3[1],ate:+m3[2]};
+  const m4=String(h).match(/acima\s*d[eo]?\s*(\d+)/i); if(m4) return {de:+m4[1],ate:99999};
+  const m5=String(h).match(/\+\s*(\d+)/i); if(m5) return {de:+m5[1],ate:99999};
+  return null;
+}
+
+async function importarTabelaExcel(clienteHint=''){
+  const clientes=await DB.getAll('clientes');
+  const tabelas=await DB.getAll('tabelas_frete');
+  const hoje=new Date().toISOString().split('T')[0];
+
+  showModal(`
+    <span class="modal-title">📥 Importar Tabela de Frete via Excel</span>
+    <div style="margin-bottom:12px;font-size:13px;color:var(--gray-600)">
+      Selecione o arquivo Excel com sua tabela de fretes. O sistema detectará automaticamente as colunas de origem, destino e tarifas.
+    </div>
+    <div id="ixl-drop" style="border:2px dashed var(--gray-300);border-radius:10px;padding:2rem;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:1rem"
+         onclick="document.getElementById('ixl-file').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--primary)'"
+         ondragleave="this.style.borderColor='var(--gray-300)'"
+         ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';processarArqTabela(event.dataTransfer.files[0])">
+      <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
+      <div style="font-weight:600;color:var(--gray-700)">Clique ou arraste o arquivo Excel aqui</div>
+      <div style="font-size:12px;color:var(--gray-400);margin-top:4px">.xlsx · .xls · .csv</div>
+    </div>
+    <input type="file" id="ixl-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="processarArqTabela(this.files[0])">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Vincular à tabela existente ou criar nova</label>
+        <select id="ixl-tabela">
+          <option value="__nova__">+ Criar nova tabela</option>
+          ${tabelas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cliente (para nova tabela)</label>
+        <select id="ixl-cliente">
+          <option value="">— selecione —</option>
+          ${clientes.map(c=>`<option value="${c.id}" ${c.id===clienteHint?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nome da nova tabela</label>
+        <input id="ixl-nome" type="text" placeholder="Ex: Tabela SP 2025">
+      </div>
+      <div class="form-group">
+        <label>Vigência início</label><input id="ixl-vi" type="date" value="${hoje}">
+      </div>
+      <div class="form-group">
+        <label>Vigência fim</label><input id="ixl-vf" type="date" value="${hoje.slice(0,4)}-12-31">
+      </div>
+    </div>
+    <div id="ixl-preview" style="margin-top:1rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button id="ixl-btn-importar" class="btn btn-success" onclick="confirmarImportacaoTabela()" style="display:none">✅ Importar trechos</button>
+    </div>
+  `);
+  // armazena dados parseados globalmente
+  window._ixlDados=null;
+}
+
+// Chamado após o arquivo ser selecionado
+function processarArqTabela(file){
+  if(!file) return;
+  const drop=document.getElementById('ixl-drop');
+  if(drop) drop.innerHTML=`<div style="color:var(--success);font-weight:600">✓ ${file.name}</div>`;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){alert('Arquivo sem dados!');return;}
+      analisarEMostrarPreview(rows);
+    }catch(ex){alert('Erro ao ler arquivo: '+ex.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function analisarEMostrarPreview(rows){
+  // Detecta linha de cabeçalho (ignora linhas vazias no topo)
+  let hIdx=0;
+  while(hIdx<rows.length && rows[hIdx].every(c=>String(c||'').trim()==='')) hIdx++;
+  const headers=rows[hIdx].map(h=>String(h||'').trim());
+  const dataRows=rows.slice(hIdx+1).filter(r=>r.some(c=>String(c||'').trim()!==''));
+
+  // Auto-detectar mapeamento: colIndex -> field
+  const mapa={};    // colIndex -> field
+  const mapaLabel={}; // colIndex -> label exibido
+  const faixasCols=[]; // {colIndex, de, ate}
+
+  headers.forEach((h,i)=>{
+    const n=normH(h);
+    // Tenta campo fixo
+    let matched=false;
+    for(const cp of CAMPO_PATTERNS){
+      if(cp.patterns.some(p=>n===p||n.includes(p))){
+        if(!Object.values(mapa).includes(cp.field)){
+          mapa[i]=cp.field; mapaLabel[i]=cp.label; matched=true; break;
+        }
+      }
+    }
+    // Tenta detectar faixa de peso
+    if(!matched){
+      const f=detectarFaixaHeader(h);
+      if(f){faixasCols.push({colIndex:i,de:f.de,ate:f.ate,label:h}); matched=true;}
+    }
+  });
+
+  const tipoDetectado = faixasCols.length>1 ? 'faixas' : detectarTipo(mapa);
+  window._ixlDados={headers,dataRows,mapa,mapaLabel,faixasCols,tipoDetectado};
+
+  // Monta opções de campo para os selects
+  const fieldOpts = `<option value="">— ignorar —</option>`+
+    CAMPO_PATTERNS.map(cp=>`<option value="${cp.field}">${cp.label}</option>`).join('');
+
+  // Preview
+  const previewEl=document.getElementById('ixl-preview');
+  if(!previewEl) return;
+
+  previewEl.innerHTML=`
+    <div style="background:var(--primary-l);border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:13px">
+      <strong>Tipo detectado:</strong>
+      <select id="ixl-tipo" style="margin-left:8px;padding:3px 8px;border-radius:4px;border:1px solid var(--gray-300)">
+        <option value="pct_nf" ${tipoDetectado==='pct_nf'?'selected':''}>% sobre NF</option>
+        <option value="m3" ${tipoDetectado==='m3'?'selected':''}>Por m³</option>
+        <option value="min_excedente" ${tipoDetectado==='min_excedente'?'selected':''}>Mínimo + excedente</option>
+        <option value="faixas" ${tipoDetectado==='faixas'?'selected':''}>Faixas de peso</option>
+      </select>
+      &nbsp;·&nbsp; <strong>${dataRows.length}</strong> linha(s) detectada(s)
+      ${faixasCols.length>0?`&nbsp;·&nbsp; <span style="color:var(--success)">✓ ${faixasCols.length} faixas de peso</span>`:''}
+    </div>
+    <div style="overflow-x:auto;margin-bottom:1rem">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--gray-100)">
+            ${headers.map((h,i)=>`
+              <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--gray-200);white-space:nowrap">
+                <div style="color:var(--gray-500);font-size:10px;margin-bottom:3px">${h}</div>
+                ${faixasCols.find(f=>f.colIndex===i)
+                  ? `<span style="font-size:10px;background:var(--success-l);color:var(--success);padding:2px 6px;border-radius:4px">⚖️ ${faixasCols.find(f=>f.colIndex===i).label}</span>`
+                  : `<select data-col="${i}" class="ixl-col-map" style="font-size:11px;padding:2px 4px;border:1px solid var(--gray-300);border-radius:4px;width:100%;min-width:110px">
+                      ${fieldOpts}
+                    </select>`
+                }
+              </th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${dataRows.slice(0,5).map(row=>`<tr>${headers.map((_,i)=>`<td style="padding:5px 8px;border-bottom:1px solid var(--gray-100);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">${row[i]??''}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${dataRows.length>5?`<div style="font-size:11px;color:var(--gray-400);text-align:center;margin-bottom:.5rem">… e mais ${dataRows.length-5} linha(s)</div>`:''}
+  `;
+
+  // Preenche selects com mapeamento detectado
+  document.querySelectorAll('.ixl-col-map').forEach(sel=>{
+    const col=+sel.dataset.col;
+    if(mapa[col]) sel.value=mapa[col];
+  });
+
+  // Mostra botão de importar
+  const btn=document.getElementById('ixl-btn-importar');
+  if(btn) btn.style.display='';
+}
+
+async function confirmarImportacaoTabela(){
+  if(!window._ixlDados){alert('Selecione um arquivo primeiro.');return;}
+  const {dataRows,faixasCols}=window._ixlDados;
+
+  // Lê mapeamento atual dos selects
+  const mapa={};
+  document.querySelectorAll('.ixl-col-map').forEach(sel=>{
+    if(sel.value) mapa[+sel.dataset.col]=sel.value;
+  });
+
+  // Valida origem e destino
+  const oriCol=Object.entries(mapa).find(([,v])=>v==='uf_origem')?.[0];
+  const dstCol=Object.entries(mapa).find(([,v])=>v==='uf_destino')?.[0];
+  if(oriCol===undefined||dstCol===undefined){
+    alert('Mapeie pelo menos as colunas UF Origem e UF Destino.'); return;
+  }
+
+  const tipo=document.getElementById('ixl-tipo')?.value||'pct_nf';
+
+  // Resolve a tabela alvo
+  let tabelaId=document.getElementById('ixl-tabela')?.value;
+  if(tabelaId==='__nova__'){
+    const clienteId=document.getElementById('ixl-cliente')?.value;
+    const nome=document.getElementById('ixl-nome')?.value?.trim();
+    const vi=document.getElementById('ixl-vi')?.value;
+    const vf=document.getElementById('ixl-vf')?.value;
+    if(!clienteId){alert('Selecione o cliente para a nova tabela.');return;}
+    if(!nome){alert('Informe o nome da nova tabela.');return;}
+    const nova=await DB.insert('tabelas_frete',{cliente_id:clienteId,nome,vigencia_inicio:vi,vigencia_fim:vf,codigo_brudam:'',ativo:true});
+    tabelaId=nova?.id||nova;
+    if(!tabelaId){toast('Erro ao criar tabela','error');return;}
+  }
+
+  let criados=0, erros=0;
+  const isFaixas = tipo==='faixas' && faixasCols.length>0;
+
+  if(isFaixas){
+    // Para tipo faixas: cada linha é um trecho, faixas vêm das colunas detectadas
+    for(const row of dataRows){
+      const ori=(row[+oriCol]||'').toString().trim().toUpperCase().slice(0,2);
+      const dst=(row[+dstCol]||'').toString().trim().toUpperCase().slice(0,2);
+      if(!ori||!dst) continue;
+
+      // Campos extras (ICMS, GRIS, pedágio, etc.)
+      const extra={icms:0,gris:0,pedagio:0,tda:0,frete_minimo:0};
+      Object.entries(mapa).forEach(([ci,field])=>{
+        if(['icms','gris','pedagio','tda','frete_minimo'].includes(field)){
+          extra[field]=parseFloat(row[+ci])||0;
+        }
+      });
+
+      try{
+        const tid=await DB.insert('trechos',{
+          tabela_id:tabelaId,uf_origem:ori,uf_destino:dst,
+          tipo_tarifa:'faixas',
+          frete_minimo:extra.frete_minimo,icms:extra.icms,gris:extra.gris,pedagio:extra.pedagio,tda:extra.tda,
+          pct_nf:0,tarifa_m3:0,fator_cubagem:300,peso_minimo:0,tarifa_excedente:0
+        });
+        const id=tid?.id||tid;
+        // Insere faixas
+        let ord=0;
+        for(const fc of faixasCols){
+          const tk=parseFloat(row[fc.colIndex])||0;
+          if(tk>0){
+            await DB.insert('faixas_peso',{trecho_id:id,peso_de:fc.de,peso_ate:fc.ate,tarifa_kg:tk,minimo_faixa:0,ordem:ord++});
+          }
+        }
+        criados++;
+      }catch(e){erros++;}
+    }
+  } else {
+    // Tipos pct_nf, m3, min_excedente
+    const fieldCols={};
+    Object.entries(mapa).forEach(([ci,field])=>{fieldCols[field]=+ci;});
+
+    for(const row of dataRows){
+      const ori=(row[fieldCols['uf_origem']]||'').toString().trim().toUpperCase().slice(0,2);
+      const dst=(row[fieldCols['uf_destino']]||'').toString().trim().toUpperCase().slice(0,2);
+      if(!ori||!dst) continue;
+
+      const gv2=f=>parseFloat(row[fieldCols[f]])||0;
+      try{
+        await DB.insert('trechos',{
+          tabela_id:tabelaId,uf_origem:ori,uf_destino:dst,tipo_tarifa:tipo,
+          pct_nf:      tipo==='pct_nf'?gv2('pct_nf'):0,
+          tarifa_m3:   tipo==='m3'?gv2('tarifa_m3'):0,
+          fator_cubagem:tipo==='m3'?(gv2('fator_cubagem')||300):300,
+          peso_minimo: tipo==='min_excedente'?gv2('peso_minimo'):0,
+          tarifa_excedente:tipo==='min_excedente'?gv2('tarifa_excedente'):0,
+          frete_minimo:gv2('frete_minimo'),
+          icms:gv2('icms'), gris:gv2('gris'), pedagio:gv2('pedagio'), tda:gv2('tda'),
+        });
+        criados++;
+      }catch(e){erros++;}
+    }
+  }
+
+  closeModal();
+  window._ixlDados=null;
+  toast(`✅ ${criados} trecho(s) importado(s)${erros?` · ${erros} erro(s)`:''}`, erros?'error':'success');
+  nav('trechos',{tabelaId,tabelaNome:'Tabela importada'});
+}
+
+// ═══════════════════════════════════════════════════════════
 // EVENTOS & INIT
 // ═══════════════════════════════════════════════════════════
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
@@ -1347,7 +1663,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 17:45 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 18:20 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
