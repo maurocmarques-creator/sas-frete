@@ -489,7 +489,7 @@ async function renderClientes() {
             <td>${c.status==='ativo'?'<span class="badge badge-green">Ativo</span>':'<span class="badge badge-gray">Inativo</span>'}</td>
             <td><div class="actions">
               <button class="btn btn-sm btn-secondary" onclick="modalCliente('${c.id}')">Editar</button>
-              <button class="btn btn-sm btn-secondary" onclick="nav('tabelas',{clienteId:'${c.id}',clienteNome:${JSON.stringify(c.nome)}})">Tabelas</button>
+              <button class="btn btn-sm btn-secondary" onclick="nav('tabelas',{clienteId:'${c.id}',clienteNome:'${(c.nome||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' })">Tabelas</button>
             </div></td>
           </tr>`).join(''):`<tr><td colspan="4"><div class="empty"><p>Nenhum cliente. Clique em "+ Novo cliente" para começar.</p></div></td></tr>`}
         </tbody>
@@ -590,7 +590,7 @@ async function renderTabelas() {
             <td>${vigBadge(t)}</td>
             <td><div class="actions">
               <button class="btn btn-sm btn-secondary" onclick="modalTabela('${t.id}')">Editar</button>
-              <button class="btn btn-sm btn-primary" onclick="nav('trechos',{tabelaId:'${t.id}',tabelaNome:${JSON.stringify(t.nome)},clienteNome:${JSON.stringify(clienteMap[t.cliente_id]||'')}})">Trechos</button>
+              <button class="btn btn-sm btn-primary" onclick="nav('trechos',{tabelaId:'${t.id}',tabelaNome:'${(t.nome||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}',clienteNome:'${(clienteMap[t.cliente_id]||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' })">Trechos</button>
             </div></td>
           </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><p>Nenhuma tabela cadastrada.</p></div></td></tr>`}
         </tbody>
@@ -1772,7 +1772,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:11 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:16 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
