@@ -1190,16 +1190,17 @@ function calcularFrete(trecho,faixas,linha){
   const ped=Math.ceil(peso/100)*(parseFloat(trecho.pedagio_por_100kg)||0);
   const tda=parseFloat(trecho.tda)||0;
   const sub=freteBase+adv+gr+ped+tda;
-  // ICMS: usa o do trecho se informado; se zerado, aplica regra CONFAZ por UF
-  const icmsAliq = parseFloat(trecho.icms)>0
-    ? parseFloat(trecho.icms)
-    : getIcmsAliquota(trecho.uf_origem, trecho.uf_destino);
+  // ICMS: sempre usa as UFs do CT-e (linha) para garantir a alíquota correta pela tabela
+  // Prioridade: UFs da linha auditada > UFs do trecho (fallback se linha não tiver)
+  const oriIcms = (linha?.uf_origem||trecho.uf_origem||'').toUpperCase();
+  const dstIcms = (linha?.uf_destino||trecho.uf_destino||'').toUpperCase();
+  const icmsAliq = getIcmsAliquota(oriIcms, dstIcms);
   const icm = icmsAliq/100;
   // Por dentro (padrão CT-e): Total = Base ÷ (1 − alíq.)  →  ICMS já incluso no valor
   // Por fora: Total = Base × (1 + alíq.)  →  ICMS somado ao frete líquido
   const porDentro=trecho.icms_por_dentro!==false;
   const tot=icm>0?(porDentro?sub/(1-icm):sub*(1+icm)):sub;
-  return{freteBase:r2(freteBase),adValorem:r2(adv),gris:r2(gr),pedagio:r2(ped),tda:r2(tda),subtotal:r2(sub),freteCalculado:r2(tot),det};
+  return{freteBase:r2(freteBase),adValorem:r2(adv),gris:r2(gr),pedagio:r2(ped),tda:r2(tda),icms:r2(tot-sub),icmsAliq,subtotal:r2(sub),freteCalculado:r2(tot),det};
 }
 function r2(v){return Math.round(v*100)/100;}
 
@@ -1369,7 +1370,7 @@ async function executarAuditoria(){
         uf_origem:l.uf_origem,uf_destino:l.uf_destino,peso_real:l.peso_real,volume_m3:l.volume_m3,
         valor_nf:l.valor_nf,frete_cobrado:cob,frete_calculado:calc.freteCalculado,
         diferenca:dif,pct_diferenca:pctDif,tipo_tarifa:trecho.tipo_tarifa,status,
-        detalhes:{base:calc.det,adv:calc.adValorem,gris:calc.gris,ped:calc.pedagio,tda:calc.tda}});
+        detalhes:{base:calc.det,adv:calc.adValorem,gris:calc.gris,ped:calc.pedagio,tda:calc.tda,icms:calc.icms,icmsAliq:calc.icmsAliq}});
     }
     const aud=await DB.insert('auditorias',{cliente_id:cliId,importacao_id:impId,
       tabela_id:tabelaUsada?.id||null,tolerancia_pct:tol,total_linhas:linhas.length,
@@ -1462,6 +1463,8 @@ async function exportarResultado(){
     'Tipo Tarifa':r.tipo_tarifa||'','Peso (kg)':parseFloat(r.peso_real)||0,
     'Valor NF (R$)':parseFloat(r.valor_nf)||0,
     'Frete Cobrado (R$)':parseFloat(r.frete_cobrado)||0,
+    'ICMS Alíq (%)':r.detalhes?.icmsAliq ?? getIcmsAliquota(r.uf_origem,r.uf_destino),
+    'ICMS Valor (R$)':parseFloat(r.detalhes?.icms)||0,
     'Frete Calculado (R$)':parseFloat(r.frete_calculado)||0,
     'Diferença (R$)':parseFloat(r.diferenca)||0,
     'Diferença (%)':parseFloat(r.pct_diferenca)||0,
@@ -1833,7 +1836,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:27 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:33 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
