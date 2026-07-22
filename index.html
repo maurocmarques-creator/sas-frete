@@ -686,6 +686,7 @@ async function renderTrechos(){
         <div class="page-subtitle">${clienteNome||''} · ${trechos.length} trecho(s)</div>
       </div>
       <div class="flex-gap">
+        ${trechos.length?`<button class="btn btn-danger" onclick="excluirTodosTrechos('${tabelaId}','${(tabelaNome||'').replace(/'/g,"\\'")}')">🗑️ Excluir todos</button>`:''}
         <button class="btn btn-success" onclick="importarTabelaExcel('${tabelaId}','${tabelaNome||''}')">📥 Importar Excel</button>
         <button class="btn btn-primary" onclick="modalTrecho('${tabelaId}')">+ Novo trecho</button>
       </div>
@@ -706,7 +707,10 @@ async function renderTrechos(){
             <td>${t.pct_advalorem||0}%</td><td>${t.pct_gris||0}%</td>
             <td>${fmtM(t.pedagio_por_100kg)}</td><td>${t.icms||0}%</td>
             <td>${t.prazo_dias||0}d</td>
-            <td><button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button></td>
+            <td><div class="actions">
+              <button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteTrechoLista('${t.id}')">Excluir</button>
+            </div></td>
           </tr>`;}).join(''):`<tr><td colspan="10"><div class="empty"><p>Nenhum trecho. Adicione as rotas desta tabela.</p></div></td></tr>`}
         </tbody>
       </table>
@@ -866,6 +870,27 @@ async function deleteTrecho(id){
   if(!confirm('Excluir este trecho?')) return;
   await DB.deleteBulk('faixas_peso','trecho_id',id);
   await DB.delete('trechos',id); closeModal(); toast('Trecho excluído'); nav('trechos',pageParams);
+}
+
+async function deleteTrechoLista(id){
+  if(!confirm('Excluir este trecho?')) return;
+  await DB.deleteBulk('faixas_peso','trecho_id',id);
+  await DB.delete('trechos',id);
+  toast('Trecho excluído');
+  renderTrechos();
+}
+
+async function excluirTodosTrechos(tabelaId, tabelaNome){
+  if(!confirm(`Excluir TODOS os trechos da tabela "${tabelaNome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+  const todos=await DB.getAll('trechos',{tabela_id:tabelaId});
+  let n=0;
+  for(const t of todos){
+    await DB.deleteBulk('faixas_peso','trecho_id',t.id);
+    await DB.delete('trechos',t.id);
+    n++;
+  }
+  toast(`${n} trecho(s) excluído(s)`);
+  renderTrechos();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1706,7 +1731,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:15 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:45 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
