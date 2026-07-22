@@ -738,7 +738,8 @@ async function renderTrechos(pg=1){
       <td>${tipoBadge(t.tipo_tarifa)}</td><td>${tar}</td>
       <td>${fmtM(t.frete_minimo)}</td>
       <td>${t.pct_advalorem||0}%</td><td>${t.pct_gris||0}%</td>
-      <td>${fmtM(t.pedagio_por_100kg)}</td><td>${t.icms||0}%</td>
+      <td>${fmtM(t.pedagio_por_100kg)}</td>
+      <td>${parseFloat(t.icms)>0?t.icms:getIcmsAliquota(t.uf_origem,t.uf_destino)}% ${parseFloat(t.icms)>0?'':'<span style="font-size:10px;color:var(--gray-400)">(auto)</span>'}</td>
       <td>${t.prazo_dias||0}d</td>
       <td><div class="actions">
         <button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button>
@@ -1171,7 +1172,11 @@ function calcularFrete(trecho,faixas,linha){
   const ped=Math.ceil(peso/100)*(parseFloat(trecho.pedagio_por_100kg)||0);
   const tda=parseFloat(trecho.tda)||0;
   const sub=freteBase+adv+gr+ped+tda;
-  const icm=(parseFloat(trecho.icms)||0)/100;
+  // ICMS: usa o do trecho se informado; se zerado, aplica regra CONFAZ por UF
+  const icmsAliq = parseFloat(trecho.icms)>0
+    ? parseFloat(trecho.icms)
+    : getIcmsAliquota(trecho.uf_origem, trecho.uf_destino);
+  const icm = icmsAliq/100;
   // Por dentro (padrão CT-e): Total = Base ÷ (1 − alíq.)  →  ICMS já incluso no valor
   // Por fora: Total = Base × (1 + alíq.)  →  ICMS somado ao frete líquido
   const porDentro=trecho.icms_por_dentro!==false;
@@ -1810,7 +1815,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:20 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:23 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
