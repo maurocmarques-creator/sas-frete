@@ -674,47 +674,83 @@ async function deleteTabela(id){
 // ═══════════════════════════════════════════════════════════
 // TRECHOS
 // ═══════════════════════════════════════════════════════════
-async function renderTrechos(){
+let _trechosCache=[], _trechosPg=1;
+const _TRECHOS_PER_PG=100;
+
+async function renderTrechos(pg=1){
   const {tabelaId,tabelaNome,clienteNome}=pageParams;
   if(!tabelaId){nav('tabelas');return;}
-  const trechos=await DB.getAll('trechos',{tabela_id:tabelaId});
+
+  // Só recarrega do DB se for a primeira chamada (pg=1) ou cache vazio
+  if(pg===1 || !_trechosCache.length){
+    _trechosCache=await DB.getAll('trechos',{tabela_id:tabelaId});
+  }
+  _trechosPg=pg;
+
+  const busca=(document.getElementById('trecho-busca')?.value||'').toUpperCase().trim();
+  const filtrados=busca
+    ? _trechosCache.filter(t=>(t.uf_origem+t.uf_destino).includes(busca)||(`${t.uf_origem}->${t.uf_destino}`).includes(busca))
+    : _trechosCache;
+
+  const total=filtrados.length;
+  const totalPgs=Math.max(1,Math.ceil(total/_TRECHOS_PER_PG));
+  const ini=(pg-1)*_TRECHOS_PER_PG;
+  const pagina=filtrados.slice(ini,ini+_TRECHOS_PER_PG);
+
+  function rowT(t){
+    let tar='—';
+    if(t.tipo_tarifa==='pct_nf') tar=`${t.pct_nf}% NF`;
+    else if(t.tipo_tarifa==='m3') tar=`${fmtM(t.tarifa_m3)}/m³`;
+    else if(t.tipo_tarifa==='min_excedente') tar=`${fmtM(t.tarifa_excedente)}/kg exc.`;
+    else if(t.tipo_tarifa==='faixas') tar='Por faixas';
+    return `<tr>
+      <td class="fw-600">${t.uf_origem} → ${t.uf_destino}</td>
+      <td>${tipoBadge(t.tipo_tarifa)}</td><td>${tar}</td>
+      <td>${fmtM(t.frete_minimo)}</td>
+      <td>${t.pct_advalorem||0}%</td><td>${t.pct_gris||0}%</td>
+      <td>${fmtM(t.pedagio_por_100kg)}</td><td>${t.icms||0}%</td>
+      <td>${t.prazo_dias||0}d</td>
+      <td><div class="actions">
+        <button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteTrechoLista('${t.id}')">Excluir</button>
+      </div></td>
+    </tr>`;
+  }
+
+  const paginacaoHtml=totalPgs>1?`
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-top:1px solid var(--gray-200);background:var(--gray-50)">
+      <button class="btn btn-sm btn-secondary" onclick="renderTrechos(${pg-1})" ${pg<=1?'disabled':''}>‹ Ant</button>
+      <span style="font-size:13px;color:var(--gray-600)">Página ${pg} de ${totalPgs} &nbsp;·&nbsp; ${total} trecho(s)</span>
+      <button class="btn btn-sm btn-secondary" onclick="renderTrechos(${pg+1})" ${pg>=totalPgs?'disabled':''}>Próx ›</button>
+    </div>`:'';
+
   document.getElementById('main-content').innerHTML=`
     <div class="page-header">
       <div>
         <button class="btn btn-sm btn-secondary" onclick="nav('tabelas')" style="margin-bottom:.5rem">← Tabelas</button>
         <div class="page-title">${tabelaNome||'Tabela'}</div>
-        <div class="page-subtitle">${clienteNome||''} · ${trechos.length} trecho(s)</div>
+        <div class="page-subtitle">${clienteNome||''} · ${_trechosCache.length} trecho(s)</div>
       </div>
       <div class="flex-gap">
-        ${trechos.length?`<button class="btn btn-danger" onclick="excluirTodosTrechos('${tabelaId}','${(tabelaNome||'').replace(/'/g,"\\'")}')">🗑️ Excluir todos</button>`:''}
+        ${_trechosCache.length?`<button class="btn btn-danger" onclick="excluirTodosTrechos('${tabelaId}','${(tabelaNome||'').replace(/'/g,"\\'")}')">🗑️ Excluir todos</button>`:''}
         <button class="btn btn-success" onclick="importarTabelaExcel('${tabelaId}','${tabelaNome||''}')">📥 Importar Excel</button>
         <button class="btn btn-primary" onclick="modalTrecho('${tabelaId}')">+ Novo trecho</button>
       </div>
     </div>
-    <div class="card" style="padding:0"><div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Rota</th><th>Tipo</th><th>Tarifa</th><th>Mínimo</th><th>Ad val.</th><th>GRIS</th><th>Pedágio/100kg</th><th>ICMS</th><th>Prazo</th><th>Ações</th></tr></thead>
-        <tbody>${trechos.length?trechos.map(t=>{
-          let tar='—';
-          if(t.tipo_tarifa==='pct_nf') tar=`${t.pct_nf}% NF`;
-          else if(t.tipo_tarifa==='m3') tar=`${fmtM(t.tarifa_m3)}/m³`;
-          else if(t.tipo_tarifa==='min_excedente') tar=`${fmtM(t.tarifa_excedente)}/kg exc.`;
-          else if(t.tipo_tarifa==='faixas') tar='Por faixas';
-          return `<tr>
-            <td class="fw-600">${t.uf_origem} → ${t.uf_destino}</td>
-            <td>${tipoBadge(t.tipo_tarifa)}</td><td>${tar}</td>
-            <td>${fmtM(t.frete_minimo)}</td>
-            <td>${t.pct_advalorem||0}%</td><td>${t.pct_gris||0}%</td>
-            <td>${fmtM(t.pedagio_por_100kg)}</td><td>${t.icms||0}%</td>
-            <td>${t.prazo_dias||0}d</td>
-            <td><div class="actions">
-              <button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteTrechoLista('${t.id}')">Excluir</button>
-            </div></td>
-          </tr>`;}).join(''):`<tr><td colspan="10"><div class="empty"><p>Nenhum trecho. Adicione as rotas desta tabela.</p></div></td></tr>`}
-        </tbody>
-      </table>
-    </div></div>`;
+    <div class="card" style="padding:.6rem 1rem;margin-bottom:.75rem">
+      <input id="trecho-busca" type="text" placeholder="Filtrar por UF origem ou destino (ex: SP, RJ, SP-RJ)…"
+        style="width:100%;padding:7px 12px;border:1px solid var(--gray-300);border-radius:var(--r);font-size:13px"
+        oninput="renderTrechos(1)" value="${busca}">
+    </div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Rota</th><th>Tipo</th><th>Tarifa</th><th>Mínimo</th><th>Ad val.</th><th>GRIS</th><th>Pedágio/100kg</th><th>ICMS</th><th>Prazo</th><th>Ações</th></tr></thead>
+          <tbody>${pagina.length?pagina.map(rowT).join(''):`<tr><td colspan="10"><div class="empty"><p>${busca?'Nenhum trecho encontrado para "'+busca+'"':'Nenhum trecho cadastrado.'}</p></div></td></tr>`}</tbody>
+        </table>
+      </div>
+      ${paginacaoHtml}
+    </div>`;
 }
 
 async function modalTrecho(tabelaId,id=null){
@@ -876,8 +912,9 @@ async function deleteTrechoLista(id){
   if(!confirm('Excluir este trecho?')) return;
   await DB.deleteBulk('faixas_peso','trecho_id',id);
   await DB.delete('trechos',id);
+  _trechosCache=_trechosCache.filter(t=>t.id!==id);
   toast('Trecho excluído');
-  renderTrechos();
+  renderTrechos(_trechosPg);
 }
 
 async function excluirTodosTrechos(tabelaId, tabelaNome){
@@ -889,8 +926,9 @@ async function excluirTodosTrechos(tabelaId, tabelaNome){
     await DB.delete('trechos',t.id);
     n++;
   }
+  _trechosCache=[];
   toast(`${n} trecho(s) excluído(s)`);
-  renderTrechos();
+  renderTrechos(1);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1734,7 +1772,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:06 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:11 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
