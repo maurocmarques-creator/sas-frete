@@ -1709,12 +1709,15 @@ async function confirmarImportacaoTabela(){
   }
 
   closeModal();
-  const nomeFinal=window._ixlTabelaNome||'Tabela';
+  // Busca nome real da tabela no banco para garantir o título correto na navegação
+  const tabInfo=await DB.getById('tabelas_frete',tabelaId);
+  const nomeFinal=tabInfo?.nome||window._ixlTabelaNome||'Tabela';
   window._ixlDados=null;
   window._ixlTabelaId=null;
   window._ixlTabelaNome=null;
   toast(`✅ ${criados} trecho(s) importado(s)${erros?` · ${erros} erro(s)`:''}`, erros?'error':'success');
-  nav('trechos',{tabelaId,...pageParams,tabelaNome:pageParams.tabelaNome||nomeFinal});
+  // Navega diretamente para os trechos da tabela importada (sem herdar pageParams que pode ter tabelaId errado)
+  nav('trechos',{tabelaId, tabelaNome:nomeFinal, clienteNome:pageParams.clienteNome||''});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1731,7 +1734,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:02 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:06 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
