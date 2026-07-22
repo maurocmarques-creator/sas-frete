@@ -563,7 +563,6 @@ async function renderTabelas() {
         <div class="page-subtitle">${fNome?'Cliente: '+fNome:tabelas.length+' tabela(s)'}</div></div>
       <div class="flex-gap">
         ${fCliente?`<button class="btn btn-secondary" onclick="nav('tabelas')">Ver todas</button>`:''}
-        <button class="btn btn-success" onclick="importarTabelaExcel('${fCliente||''}')">📥 Importar Excel</button>
         <button class="btn btn-primary" onclick="modalTabela()">+ Nova tabela</button>
       </div>
     </div>
@@ -672,7 +671,10 @@ async function renderTrechos(){
         <div class="page-title">${tabelaNome||'Tabela'}</div>
         <div class="page-subtitle">${clienteNome||''} · ${trechos.length} trecho(s)</div>
       </div>
-      <button class="btn btn-primary" onclick="modalTrecho('${tabelaId}')">+ Novo trecho</button>
+      <div class="flex-gap">
+        <button class="btn btn-success" onclick="importarTabelaExcel('${tabelaId}','${tabelaNome||''}')">📥 Importar Excel</button>
+        <button class="btn btn-primary" onclick="modalTrecho('${tabelaId}')">+ Novo trecho</button>
+      </div>
     </div>
     <div class="card" style="padding:0"><div class="table-wrap">
       <table class="data-table">
@@ -1382,62 +1384,35 @@ function detectarFaixaHeader(h){
   return null;
 }
 
-async function importarTabelaExcel(clienteHint=''){
-  const clientes=await DB.getAll('clientes');
-  const tabelas=await DB.getAll('tabelas_frete');
-  const hoje=new Date().toISOString().split('T')[0];
+async function importarTabelaExcel(tabelaId, tabelaNome=''){
+  // Guarda tabelaId e nome para uso na confirmação
+  window._ixlTabelaId = tabelaId;
+  window._ixlTabelaNome = tabelaNome;
+  window._ixlDados = null;
 
   showModal(`
-    <span class="modal-title">📥 Importar Tabela de Frete via Excel</span>
-    <div style="margin-bottom:12px;font-size:13px;color:var(--gray-600)">
-      Selecione o arquivo Excel com sua tabela de fretes. O sistema detectará automaticamente as colunas de origem, destino e tarifas.
+    <span class="modal-title">📥 Importar trechos via Excel — ${tabelaNome}</span>
+    <div style="margin-bottom:12px;font-size:13px;color:var(--gray-500)">
+      Os trechos serão importados diretamente para esta tabela. Selecione o arquivo e o sistema detectará automaticamente origem, destino e tarifas.
     </div>
-    <div id="ixl-drop" style="border:2px dashed var(--gray-300);border-radius:10px;padding:2rem;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:1rem"
+    <div id="ixl-drop"
+         style="border:2px dashed var(--gray-300);border-radius:10px;padding:2.5rem 1rem;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:1rem"
          onclick="document.getElementById('ixl-file').click()"
          ondragover="event.preventDefault();this.style.borderColor='var(--primary)'"
          ondragleave="this.style.borderColor='var(--gray-300)'"
          ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';processarArqTabela(event.dataTransfer.files[0])">
-      <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
-      <div style="font-weight:600;color:var(--gray-700)">Clique ou arraste o arquivo Excel aqui</div>
-      <div style="font-size:12px;color:var(--gray-400);margin-top:4px">.xlsx · .xls · .csv</div>
+      <div style="font-size:2.5rem;margin-bottom:.5rem">📊</div>
+      <div style="font-weight:600;color:var(--gray-700);margin-bottom:4px">Clique aqui ou arraste o arquivo</div>
+      <div style="font-size:12px;color:var(--gray-400)">.xlsx · .xls · .csv</div>
     </div>
-    <input type="file" id="ixl-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="processarArqTabela(this.files[0])">
-    <div class="form-row">
-      <div class="form-group">
-        <label>Vincular à tabela existente ou criar nova</label>
-        <select id="ixl-tabela">
-          <option value="__nova__">+ Criar nova tabela</option>
-          ${tabelas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Cliente (para nova tabela)</label>
-        <select id="ixl-cliente">
-          <option value="">— selecione —</option>
-          ${clientes.map(c=>`<option value="${c.id}" ${c.id===clienteHint?'selected':''}>${c.nome}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Nome da nova tabela</label>
-        <input id="ixl-nome" type="text" placeholder="Ex: Tabela SP 2025">
-      </div>
-      <div class="form-group">
-        <label>Vigência início</label><input id="ixl-vi" type="date" value="${hoje}">
-      </div>
-      <div class="form-group">
-        <label>Vigência fim</label><input id="ixl-vf" type="date" value="${hoje.slice(0,4)}-12-31">
-      </div>
-    </div>
-    <div id="ixl-preview" style="margin-top:1rem"></div>
-    <div class="modal-footer">
+    <input type="file" id="ixl-file" accept=".xlsx,.xls,.csv" style="display:none"
+           onchange="processarArqTabela(this.files[0])">
+    <div id="ixl-preview"></div>
+    <div class="modal-footer" style="margin-top:1rem">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
       <button id="ixl-btn-importar" class="btn btn-success" onclick="confirmarImportacaoTabela()" style="display:none">✅ Importar trechos</button>
     </div>
   `);
-  // armazena dados parseados globalmente
-  window._ixlDados=null;
 }
 
 // Chamado após o arquivo ser selecionado
@@ -1565,19 +1540,9 @@ async function confirmarImportacaoTabela(){
 
   const tipo=document.getElementById('ixl-tipo')?.value||'pct_nf';
 
-  // Resolve a tabela alvo
-  let tabelaId=document.getElementById('ixl-tabela')?.value;
-  if(tabelaId==='__nova__'){
-    const clienteId=document.getElementById('ixl-cliente')?.value;
-    const nome=document.getElementById('ixl-nome')?.value?.trim();
-    const vi=document.getElementById('ixl-vi')?.value;
-    const vf=document.getElementById('ixl-vf')?.value;
-    if(!clienteId){alert('Selecione o cliente para a nova tabela.');return;}
-    if(!nome){alert('Informe o nome da nova tabela.');return;}
-    const nova=await DB.insert('tabelas_frete',{cliente_id:clienteId,nome,vigencia_inicio:vi,vigencia_fim:vf,codigo_brudam:'',ativo:true});
-    tabelaId=nova?.id||nova;
-    if(!tabelaId){toast('Erro ao criar tabela','error');return;}
-  }
+  // Usa a tabela já aberta
+  const tabelaId=window._ixlTabelaId;
+  if(!tabelaId){alert('Tabela não identificada. Abra uma tabela e tente novamente.');return;}
 
   let criados=0, erros=0;
   const isFaixas = tipo==='faixas' && faixasCols.length>0;
@@ -1644,9 +1609,12 @@ async function confirmarImportacaoTabela(){
   }
 
   closeModal();
+  const nomeFinal=window._ixlTabelaNome||'Tabela';
   window._ixlDados=null;
+  window._ixlTabelaId=null;
+  window._ixlTabelaNome=null;
   toast(`✅ ${criados} trecho(s) importado(s)${erros?` · ${erros} erro(s)`:''}`, erros?'error':'success');
-  nav('trechos',{tabelaId,tabelaNome:'Tabela importada'});
+  nav('trechos',{tabelaId,...pageParams,tabelaNome:pageParams.tabelaNome||nomeFinal});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1663,7 +1631,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 18:20 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 18:50 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
