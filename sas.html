@@ -372,6 +372,36 @@ function nav(page, params={}) {
 const UFs=['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
            'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
+// ─── ICMS interestadual / intraestadual (Convênio ICMS / CONFAZ) ───────────
+// UFs que aplicam 7% para destinos N/NE (estados "contribuintes maiores")
+const _UF_APLICA_7PCT = new Set(['SP','MG','RJ','ES','PR','SC','RS','GO','DF','MT','MS']);
+// UFs de destino que recebem 7% quando a origem é do eixo S/SE/CO
+const _UF_RECEBE_7PCT = new Set(['AC','AL','AM','AP','BA','CE','MA','PA','PB','PE','PI','RN','RO','RR','SE','TO']);
+// Alíquotas internas por UF (para operações intraestaduais)
+const _ICMS_INTRA = {
+  AC:17,AL:12,AM:12,AP:12,BA:12,CE:12,DF:12,ES:12,GO:12,
+  MA:12,MT:12,MS:12,MG:12,PA:12,PB:12,PR:12,PE:12,PI:12,
+  RJ:12,RN:12,RS:12,RO:17,RR:17,SC:12,SP:12,SE:17,TO:12
+};
+function getIcmsAliquota(ori, dst){
+  if(!ori||!dst) return 0;
+  ori=ori.toUpperCase(); dst=dst.toUpperCase();
+  if(ori===dst) return _ICMS_INTRA[ori]||12; // intraestadual
+  if(_UF_APLICA_7PCT.has(ori)&&_UF_RECEBE_7PCT.has(dst)) return 7; // interestadual 7%
+  return 12; // interestadual 12%
+}
+function atualizarIcmsModal(){
+  const ori=document.getElementById('r-ori')?.value;
+  const dst=document.getElementById('r-dst')?.value;
+  if(!ori||!dst) return;
+  const aliq=getIcmsAliquota(ori,dst);
+  const campo=document.getElementById('r-icms');
+  if(campo) campo.value=aliq;
+  const hint=document.getElementById('r-icms-hint');
+  if(hint) hint.textContent=`Regra: ${ori}→${dst} = ${aliq}%`;
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 function fmtM(v){ if(v==null||v===''||isNaN(v)) return '—'; return 'R$ '+parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtN(v,d=3){ return parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtDate(d){ if(!d) return '—'; try{ return new Date(d+'T12:00:00').toLocaleDateString('pt-BR'); }catch{ return d; } }
@@ -767,8 +797,8 @@ async function modalTrecho(tabelaId,id=null){
     </div>
     <div class="modal-body">
       <div class="form-row">
-        <div class="form-group"><label>UF Origem *</label><select id="r-ori">${mkUF(t?.uf_origem)}</select></div>
-        <div class="form-group"><label>UF Destino *</label><select id="r-dst">${mkUF(t?.uf_destino)}</select></div>
+        <div class="form-group"><label>UF Origem *</label><select id="r-ori" onchange="atualizarIcmsModal()">${mkUF(t?.uf_origem)}</select></div>
+        <div class="form-group"><label>UF Destino *</label><select id="r-dst" onchange="atualizarIcmsModal()">${mkUF(t?.uf_destino)}</select></div>
         <div class="form-group"><label>Prazo (dias úteis)</label><input type="number" id="r-pz" value="${t?.prazo_dias||0}" min="0"></div>
       </div>
       <div class="section-sep">Tipo de tarifa</div>
@@ -831,7 +861,11 @@ async function modalTrecho(tabelaId,id=null){
       </div>
       <div class="form-row">
         <div class="form-group"><label>TDA (R$ fixo)</label><input type="number" step="0.01" id="r-tda" value="${t?.tda||0}"></div>
-        <div class="form-group"><label>ICMS (%)</label><input type="number" step="0.0001" id="r-icms" value="${t?.icms||0}"></div>
+        <div class="form-group">
+          <label>ICMS (%)</label>
+          <input type="number" step="0.0001" id="r-icms" value="${t?.icms!=null?t.icms:getIcmsAliquota(t?.uf_origem,t?.uf_destino)}">
+          <small id="r-icms-hint" style="color:var(--gray-400);font-size:11px">${t?.uf_origem&&t?.uf_destino?`Regra: ${t.uf_origem}→${t.uf_destino} = ${getIcmsAliquota(t.uf_origem,t.uf_destino)}%`:''}</small>
+        </div>
         <div class="form-group"><label>ISS (%)</label><input type="number" step="0.0001" id="r-iss" value="${t?.iss||0}"></div>
       </div>
     </div>
@@ -1693,18 +1727,20 @@ async function confirmarImportacaoTabela(){
       if(!ori||!dst) continue;
 
       // Campos extras (ICMS, GRIS, pedágio, etc.)
-      const extra={icms:0,gris:0,pedagio:0,tda:0,frete_minimo:0};
+      const extra={icms:null,gris:0,pedagio:0,tda:0,frete_minimo:0};
       Object.entries(mapa).forEach(([ci,field])=>{
         if(['icms','gris','pedagio','tda','frete_minimo'].includes(field)){
           extra[field]=parseFloat(row[+ci])||0;
         }
       });
+      // ICMS: usa o da planilha se mapeado e >0, senão aplica regra UF origem x destino
+      const icmsFaixas = (extra.icms!=null && extra.icms>0) ? extra.icms : getIcmsAliquota(ori,dst);
 
       try{
         const tid=await DB.insert('trechos',{
           tabela_id:tabelaId,uf_origem:ori,uf_destino:dst,
           tipo_tarifa:'faixas',
-          frete_minimo:extra.frete_minimo,icms:extra.icms,gris:extra.gris,pedagio:extra.pedagio,tda:extra.tda,
+          frete_minimo:extra.frete_minimo,icms:icmsFaixas,gris:extra.gris,pedagio:extra.pedagio,tda:extra.tda,
           pct_nf:0,tarifa_m3:0,fator_cubagem:300,peso_minimo:0,tarifa_excedente:0
         });
         const id=tid?.id||tid;
@@ -1739,7 +1775,9 @@ async function confirmarImportacaoTabela(){
           peso_minimo: tipo==='min_excedente'?gv2('peso_minimo'):0,
           tarifa_excedente:tipo==='min_excedente'?gv2('tarifa_excedente'):0,
           frete_minimo:gv2('frete_minimo'),
-          icms:gv2('icms'), gris:gv2('gris'), pedagio:gv2('pedagio'), tda:gv2('tda'),
+          // ICMS: usa o da planilha se mapeado e >0, senão aplica regra UF origem x destino
+          icms: gv2('icms')>0 ? gv2('icms') : getIcmsAliquota(ori,dst),
+          gris:gv2('gris'), pedagio:gv2('pedagio'), tda:gv2('tda'),
         });
         criados++;
       }catch(e){erros++;}
@@ -1772,7 +1810,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:16 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:20 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
