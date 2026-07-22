@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAS — Sistema de Auditoria de Fretes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --primary:#2563eb;--primary-h:#1d4ed8;--primary-l:#eff6ff;
+  --success:#16a34a;--success-l:#f0fdf4;
+  --warn:#d97706;--warn-l:#fffbeb;
+  --danger:#dc2626;--danger-l:#fef2f2;
+  --purple:#7c3aed;--purple-l:#f5f3ff;
+  --gray-50:#f8fafc;--gray-100:#f1f5f9;--gray-200:#e2e8f0;
+  --gray-300:#cbd5e1;--gray-400:#94a3b8;--gray-500:#64748b;
+  --gray-600:#475569;--gray-700:#334155;--gray-800:#1e293b;
+  --gray-900:#0f172a;--white:#fff;
+  --side-w:220px;--r:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--gray-800);background:var(--gray-50);min-height:100vh}
+/* AUTH */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--gray-50)}
+.login-box{background:var(--white);border:1px solid var(--gray-200);border-radius:12px;padding:2rem;width:360px;box-shadow:var(--shadow)}
+.login-box h1{font-size:20px;font-weight:600;color:var(--gray-900);margin-bottom:4px}
+.login-box p{font-size:13px;color:var(--gray-500);margin-bottom:1.5rem}
+.login-mode{font-size:12px;background:var(--primary-l);color:var(--primary);border-radius:var(--r);padding:8px 12px;margin-bottom:1rem;line-height:1.5}
+/* LAYOUT */
+#app{display:none;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;width:var(--side-w);height:100vh;background:var(--gray-900);display:flex;flex-direction:column;z-index:100}
+.sidebar-logo{padding:1.25rem 1rem;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-logo span{font-size:16px;font-weight:700;color:var(--white)}
+.sidebar-logo small{display:block;font-size:11px;color:var(--gray-400);margin-top:2px}
+.nav-group{padding:.5rem 0}
+.nav-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-500);padding:.5rem 1rem .25rem}
+.nav-item{display:flex;align-items:center;gap:10px;padding:.6rem 1rem;color:var(--gray-400);cursor:pointer;transition:all .15s;border-left:3px solid transparent;font-size:13px}
+.nav-item:hover{background:rgba(255,255,255,.06);color:var(--white)}
+.nav-item.active{background:rgba(37,99,235,.2);color:#eff6ff;border-left-color:var(--primary)}
+.nav-item svg{width:16px;height:16px;flex-shrink:0}
+.sidebar-footer{margin-top:auto;padding:1rem;border-top:1px solid rgba(255,255,255,.08)}
+.user-info{font-size:12px;color:var(--gray-400);margin-bottom:.5rem;word-break:break-all}
+.content{margin-left:var(--side-w);padding:1.5rem;min-height:100vh}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;gap:1rem}
+.page-title{font-size:20px;font-weight:600;color:var(--gray-900)}
+.page-subtitle{font-size:13px;color:var(--gray-500);margin-top:2px}
+/* CARDS */
+.card{background:var(--white);border:1px solid var(--gray-200);border-radius:12px;padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+.card-title{font-size:14px;font-weight:600;color:var(--gray-800);margin-bottom:1rem}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:1rem}
+.metric{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--r);padding:1rem}
+.metric-label{font-size:11px;color:var(--gray-500);margin-bottom:4px}
+.metric-value{font-size:22px;font-weight:600;color:var(--gray-900)}
+.metric-sub{font-size:11px;color:var(--gray-500);margin-top:2px}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;text-decoration:none}
+.btn-primary{background:var(--primary);color:var(--white);border-color:var(--primary)}
+.btn-primary:hover{background:var(--primary-h)}
+.btn-secondary{background:var(--white);color:var(--gray-700);border-color:var(--gray-300)}
+.btn-secondary:hover{background:var(--gray-50)}
+.btn-danger{background:var(--danger-l);color:var(--danger);border-color:#fecaca}
+.btn-danger:hover{background:#fee2e2}
+.btn-success{background:var(--success);color:var(--white);border-color:var(--success)}
+.btn-success:hover{background:#15803d}
+.btn-sm{padding:4px 10px;font-size:12px}
+/* FORMS */
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:12px;font-weight:500;color:var(--gray-600)}
+.form-group input,.form-group select,.form-group textarea{padding:7px 10px;border:1px solid var(--gray-300);border-radius:var(--r);font-size:13px;color:var(--gray-800);background:var(--white);outline:none;width:100%}
+.form-group input:focus,.form-group select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.form-group input:disabled{background:var(--gray-100);color:var(--gray-500)}
+.section-sep{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-500);border-bottom:1px solid var(--gray-200);padding-bottom:6px;margin:1rem 0 .75rem}
+/* TABLES */
+.table-wrap{overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-500);text-align:left;padding:8px 12px;border-bottom:1px solid var(--gray-200);white-space:nowrap}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--gray-100);color:var(--gray-700);vertical-align:middle}
+.data-table tbody tr:hover td{background:var(--gray-50)}
+.data-table tbody tr:last-child td{border-bottom:none}
+.actions{display:flex;gap:6px}
+/* BADGES */
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px}
+.badge-green{background:var(--success-l);color:var(--success)}
+.badge-red{background:var(--danger-l);color:var(--danger)}
+.badge-amber{background:var(--warn-l);color:var(--warn)}
+.badge-blue{background:var(--primary-l);color:var(--primary)}
+.badge-purple{background:var(--purple-l);color:var(--purple)}
+.badge-gray{background:var(--gray-100);color:var(--gray-600)}
+/* MODALS */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto}
+.modal{background:var(--white);border-radius:12px;width:100%;max-width:720px;box-shadow:0 10px 40px rgba(0,0,0,.15);margin:auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid var(--gray-200)}
+.modal-title{font-size:16px;font-weight:600;color:var(--gray-900)}
+.modal-body{padding:1.5rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:8px}
+.btn-close{background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:22px;line-height:1;padding:4px}
+.btn-close:hover{color:var(--gray-700)}
+/* FAIXAS */
+.faixas-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:.5rem}
+.faixas-table th{font-size:11px;color:var(--gray-500);padding:6px 8px;border-bottom:1px solid var(--gray-200);text-align:left}
+.faixas-table td{padding:4px 8px}
+.faixas-table input{width:100%;padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px}
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--gray-300);border-radius:12px;padding:2rem;text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--primary);background:var(--primary-l)}
+.upload-zone svg{width:40px;height:40px;color:var(--gray-400);margin:0 auto .75rem;display:block}
+.upload-zone p{font-size:14px;font-weight:500;color:var(--gray-700)}
+.upload-zone small{font-size:12px;color:var(--gray-500)}
+/* MAPPING */
+.map-row{display:grid;grid-template-columns:1fr 28px 1fr;align-items:center;gap:8px;margin-bottom:8px;padding:6px 10px;background:var(--gray-50);border-radius:var(--r)}
+.map-field{font-size:12px;font-weight:500;color:var(--gray-700)}
+.map-arrow{text-align:center;color:var(--gray-400)}
+/* ALERTS */
+.alert{border-radius:var(--r);padding:.75rem 1rem;font-size:13px;margin-bottom:.75rem;border:1px solid transparent}
+.alert-info{background:var(--primary-l);border-color:#bfdbfe;color:#1e40af}
+.alert-success{background:var(--success-l);border-color:#bbf7d0;color:#166534}
+.alert-warn{background:var(--warn-l);border-color:#fde68a;color:#92400e}
+.alert-danger{background:var(--danger-l);border-color:#fecaca;color:#991b1b}
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--gray-200);margin-bottom:1.25rem}
+.tab{padding:.6rem 1.1rem;font-size:13px;color:var(--gray-500);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:500}
+.tab:hover:not(.active){color:var(--gray-700)}
+/* PROGRESS */
+.progress-bar{height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .3s}
+/* RESULTS */
+.res-ok   td{background:#f0fdf4}
+.res-mais td{background:#fef2f2}
+.res-menos td{background:#fffbeb}
+.res-sem  td{background:var(--gray-50)}
+/* EMPTY */
+.empty{text-align:center;padding:3rem 1rem;color:var(--gray-400)}
+.empty p{font-size:14px}
+/* MISC */
+.flex-between{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.flex-gap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mono{font-family:monospace;font-size:12px}
+.text-muted{color:var(--gray-500)}
+.text-danger{color:var(--danger)}
+.text-success{color:var(--success)}
+.text-warn{color:var(--warn)}
+.fw-600{font-weight:600}
+hr{border:none;border-top:1px solid var(--gray-200);margin:.75rem 0}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>SAS Frete</h1>
+    <p>Sistema de Auditoria de Tabelas</p>
+    <div class="login-mode" id="login-mode-msg"></div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>E-mail</label>
+      <input type="email" id="login-email" placeholder="seu@email.com">
+    </div>
+    <div class="form-group" style="margin-bottom:1.25rem">
+      <label>Senha</label>
+      <input type="password" id="login-pass" placeholder="••••••••">
+    </div>
+    <div id="login-err" class="alert alert-danger" style="display:none"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Entrar</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span>SAS Frete</span>
+      <small>Auditoria de Tabelas</small>
+    </div>
+    <nav class="nav-group">
+      <div class="nav-label">Principal</div>
+      <div class="nav-item" onclick="nav('dashboard')" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="nav('clientes')" data-page="clientes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Clientes
+      </div>
+      <div class="nav-item" onclick="nav('tabelas')" data-page="tabelas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Tabelas
+      </div>
+    </nav>
+    <nav class="nav-group">
+      <div class="nav-label">Operação</div>
+      <div class="nav-item" onclick="nav('importar')" data-page="importar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Importar Excel
+      </div>
+      <div class="nav-item" onclick="nav('auditoria')" data-page="auditoria">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+        Auditoria
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info" id="sidebar-user"></div>
+      <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" onclick="doLogout()">Sair</button>
+    </div>
+  </aside>
+  <main class="content" id="main-content"></main>
+</div>
+
+<div id="modal-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIGURAÇÃO
+// Preencha para usar Supabase (nuvem + tempo real).
+// Deixe vazio para modo local (localStorage — testes imediatos).
+// ═══════════════════════════════════════════════════════════
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
+const USE_SUPABASE = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+let sb = null;
+let currentUser = null;
+
+if (USE_SUPABASE) {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  document.getElementById('login-mode-msg').textContent = 'Modo nuvem — Supabase conectado';
+} else {
+  document.getElementById('login-mode-msg').innerHTML =
+    '<strong>Modo local</strong> — dados salvos neste navegador.<br>Configure Supabase para acesso em nuvem e múltiplos usuários.';
+}
+
+// ═══════════════════════════════════════════════════════════
+// STORAGE ABSTRACTION
+// ═══════════════════════════════════════════════════════════
+const DB = {
+  async getAll(table, filters={}) {
+    if (USE_SUPABASE) {
+      let q = sb.from(table).select('*');
+      for (const [k,v] of Object.entries(filters)) q = q.eq(k,v);
+      const {data,error} = await q.order('created_at',{ascending:false});
+      if (error) throw error;
+      return data||[];
+    }
+    let items = JSON.parse(localStorage.getItem('sas_'+table)||'[]');
+    for (const [k,v] of Object.entries(filters)) items = items.filter(i=>i[k]===v);
+    return [...items].reverse();
+  },
+  async getById(table, id) {
+    if (!id) return null;
+    if (USE_SUPABASE) {
+      const {data,error} = await sb.from(table).select('*').eq('id',id).single();
+      if (error) return null;
+      return data;
+    }
+    const items = JSON.parse(localStorage.getItem('sas_'+table)||'[]');
+    return items.find(i=>i.id===id)||null;
+  },
+  async insert(table, data) {
+    const item = {...data, id: crypto.randomUUID(), created_at: new Date().toISOString()};
+    if (USE_SUPABASE) {
+      const {data:d,error} = await sb.from(table).insert(item).select().single();
+      if (error) throw error;
+      return d;
+    }
+    const items = JSON.parse(localStorage.getItem('sas_'+table)||'[]');
+    items.push(item);
+    localStorage.setItem('sas_'+table, JSON.stringify(items));
+    return item;
+  },
+  async update(table, id, data) {
+    if (USE_SUPABASE) {
+      const {data:d,error} = await sb.from(table).update(data).eq('id',id).select().single();
+      if (error) throw error;
+      return d;
+    }
+    const items = JSON.parse(localStorage.getItem('sas_'+table)||'[]');
+    const idx = items.findIndex(i=>i.id===id);
+    if (idx>=0) { items[idx]={...items[idx],...data}; localStorage.setItem('sas_'+table,JSON.stringify(items)); return items[idx]; }
+  },
+  async delete(table, id) {
+    if (USE_SUPABASE) {
+      const {error} = await sb.from(table).delete().eq('id',id);
+      if (error) throw error;
+      return;
+    }
+    const items = JSON.parse(localStorage.getItem('sas_'+table)||'[]').filter(i=>i.id!==id);
+    localStorage.setItem('sas_'+table, JSON.stringify(items));
+  },
+  async deleteBulk(table, field, value) {
+    if (USE_SUPABASE) {
+      await sb.from(table).delete().eq(field,value);
+      return;
+    }
+    const items = JSON.parse(localStorage.getItem('sas_'+table)||'[]').filter(i=>i[field]!==value);
+    localStorage.setItem('sas_'+table, JSON.stringify(items));
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const err   = document.getElementById('login-err');
+  err.style.display='none';
+  if (!email) { showErr('Informe o e-mail.'); return; }
+  if (!pass)  { showErr('Informe a senha.'); return; }
+
+  function showErr(m){ err.textContent=m; err.style.display='block'; }
+
+  if (USE_SUPABASE) {
+    const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
+    if (error) { showErr(error.message); return; }
+    currentUser = data.user;
+  } else {
+    currentUser = {email, id:'local-user'};
+    localStorage.setItem('sas_user', JSON.stringify(currentUser));
+  }
+  showApp();
+}
+
+async function doLogout() {
+  if (USE_SUPABASE) await sb.auth.signOut();
+  localStorage.removeItem('sas_user');
+  currentUser = null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+}
+
+async function checkAuth() {
+  if (USE_SUPABASE) {
+    const {data:{session}} = await sb.auth.getSession();
+    if (session) { currentUser=session.user; showApp(); }
+  } else {
+    const u = localStorage.getItem('sas_user');
+    if (u) { currentUser=JSON.parse(u); showApp(); }
+  }
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('sidebar-user').textContent = currentUser?.email||'usuário local';
+  nav('dashboard');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════════
+let currentPage='';
+let pageParams={};
+
+function nav(page, params={}) {
+  currentPage=page; pageParams=params;
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    el.classList.toggle('active', el.dataset.page===page);
+  });
+  document.getElementById('main-content').innerHTML=
+    '<div style="padding:2rem;color:var(--gray-400)">Carregando...</div>';
+  const pages={dashboard:renderDashboard,clientes:renderClientes,tabelas:renderTabelas,
+               trechos:renderTrechos,importar:renderImportar,auditoria:renderAuditoria,
+               resultado:renderResultado};
+  if (pages[page]) pages[page]();
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+const UFs=['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
+           'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+
+function fmtM(v){ if(v==null||v===''||isNaN(v)) return '—'; return 'R$ '+parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtN(v,d=3){ return parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtDate(d){ if(!d) return '—'; try{ return new Date(d+'T12:00:00').toLocaleDateString('pt-BR'); }catch{ return d; } }
+
+function tipoBadge(t){
+  const m={pct_nf:['badge-blue','% NF'],m3:['badge-purple','m³'],min_excedente:['badge-amber','Mín+Exc'],faixas:['badge-green','Faixas']};
+  const [c,l]=m[t]||['badge-gray',t||'—'];
+  return `<span class="badge ${c}">${l}</span>`;
+}
+function statusBadge(s){
+  const m={conforme:'badge-green',cobrado_a_mais:'badge-red',cobrado_a_menos:'badge-amber',sem_trecho:'badge-gray',sem_tabela:'badge-gray'};
+  const l={conforme:'Conforme',cobrado_a_mais:'A mais',cobrado_a_menos:'A menos',sem_trecho:'Sem trecho',sem_tabela:'Sem tabela'};
+  return `<span class="badge ${m[s]||'badge-gray'}">${l[s]||s}</span>`;
+}
+function openModal(html){ document.getElementById('modal-container').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">${html}</div>`; }
+function closeModal(){ document.getElementById('modal-container').innerHTML=''; }
+function toast(msg,type='success'){
+  const d=document.createElement('div');
+  const bg=type==='success'?'#166534':type==='danger'?'#991b1b':'#92400e';
+  d.style.cssText=`position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:${bg};color:#fff;padding:.75rem 1.25rem;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.2)`;
+  d.textContent=msg; document.body.appendChild(d); setTimeout(()=>d.remove(),3500);
+}
+function switchTab(el,targetId){
+  el.closest('.card,#tab-root').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const allPanels=el.closest('.card,#tab-root').querySelectorAll('[id^="tab-"]');
+  allPanels.forEach(p=>p.style.display='none');
+  document.getElementById(targetId).style.display='block';
+}
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════
+async function renderDashboard() {
+  const [clientes,tabelas,importacoes,auditorias] = await Promise.all([
+    DB.getAll('clientes'), DB.getAll('tabelas_frete'),
+    DB.getAll('importacoes'), DB.getAll('auditorias')
+  ]);
+  const hoje = new Date().toISOString().split('T')[0];
+  const vigentes = tabelas.filter(t=>t.vigencia_inicio<=hoje&&t.vigencia_fim>=hoje);
+  const expirando = tabelas.filter(t=>{
+    if(t.vigencia_fim<hoje) return false;
+    return (new Date(t.vigencia_fim)-new Date())/86400000<=30;
+  });
+  const ativos = clientes.filter(c=>c.status==='ativo');
+  const semTab = ativos.filter(c=>!vigentes.find(t=>t.cliente_id===c.id));
+  const totDiv = auditorias.reduce((s,a)=>s+(parseFloat(a.valor_divergencia)||0),0);
+
+  const clienteMap={};
+  clientes.forEach(c=>clienteMap[c.id]=c.nome);
+  const tabelaMap={};
+  tabelas.forEach(t=>tabelaMap[t.id]=t.nome);
+
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-subtitle">Visão geral do sistema</div></div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Clientes ativos</div><div class="metric-value">${ativos.length}</div>
+        <div class="metric-sub ${semTab.length?'text-warn':'text-success'}">${semTab.length?semTab.length+' sem tabela vigente':'Todos com tabela'}</div></div>
+      <div class="metric"><div class="metric-label">Tabelas vigentes</div><div class="metric-value">${vigentes.length}</div>
+        ${expirando.length?`<div class="metric-sub text-warn">${expirando.length} expiram em 30d</div>`:'<div class="metric-sub text-muted">—</div>'}</div>
+      <div class="metric"><div class="metric-label">Importações</div><div class="metric-value">${importacoes.length}</div><div class="metric-sub text-muted">Total</div></div>
+      <div class="metric"><div class="metric-label">Auditorias</div><div class="metric-value">${auditorias.length}</div>
+        <div class="metric-sub text-danger">${fmtM(totDiv)} em diverg.</div></div>
+    </div>
+    ${expirando.length?`<div class="alert alert-warn"><strong>Atenção:</strong> tabela(s) expirando em 30 dias: ${expirando.map(t=>`<strong>${t.nome}</strong>`).join(', ')}</div>`:''}
+    ${semTab.length?`<div class="alert alert-warn">Clientes sem tabela vigente: ${semTab.map(c=>`<strong>${c.nome}</strong>`).join(', ')}</div>`:''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem">
+      <div class="card">
+        <div class="card-title">Últimas auditorias</div>
+        ${auditorias.length?`<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Cliente</th><th>Data</th><th>Conform.</th><th>Diverg. R$</th></tr></thead>
+          <tbody>${auditorias.slice(0,5).map(a=>{
+            const pct=a.total_linhas>0?(a.total_conformes/a.total_linhas*100).toFixed(1):'0';
+            return `<tr><td>${clienteMap[a.cliente_id]||'—'}</td>
+              <td>${fmtDate(a.created_at?.split('T')[0])}</td>
+              <td><span class="badge ${parseFloat(pct)>=90?'badge-green':parseFloat(pct)>=70?'badge-amber':'badge-red'}">${pct}%</span></td>
+              <td class="text-danger fw-600">${fmtM(a.valor_divergencia)}</td></tr>`;
+          }).join('')}</tbody></table></div>`:
+          '<div class="empty"><p>Nenhuma auditoria ainda</p></div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">Tabelas vigentes</div>
+        ${vigentes.length?`<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Nome</th><th>Cliente</th><th>Dias</th></tr></thead>
+          <tbody>${vigentes.slice(0,6).map(t=>{
+            const dias=Math.ceil((new Date(t.vigencia_fim)-new Date())/86400000);
+            return `<tr><td class="mono fw-600">${t.nome}</td>
+              <td>${clienteMap[t.cliente_id]||'—'}</td>
+              <td><span class="badge ${dias<=30?'badge-amber':'badge-green'}">${dias}d</span></td></tr>`;
+          }).join('')}</tbody></table></div>`:
+          '<div class="empty"><p>Nenhuma tabela vigente</p></div>'}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLIENTES
+// ═══════════════════════════════════════════════════════════
+async function renderClientes() {
+  const clientes = await DB.getAll('clientes');
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Clientes</div><div class="page-subtitle">${clientes.length} cadastrado(s)</div></div>
+      <button class="btn btn-primary" onclick="modalCliente()">+ Novo cliente</button>
+    </div>
+    <div class="card" style="padding:0"><div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Nome</th><th>Cód. Brudam</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${clientes.length?clientes.map(c=>`
+          <tr>
+            <td class="fw-600">${c.nome}</td>
+            <td class="mono">${c.codigo_brudam||'—'}</td>
+            <td>${c.status==='ativo'?'<span class="badge badge-green">Ativo</span>':'<span class="badge badge-gray">Inativo</span>'}</td>
+            <td><div class="actions">
+              <button class="btn btn-sm btn-secondary" onclick="modalCliente('${c.id}')">Editar</button>
+              <button class="btn btn-sm btn-secondary" onclick="nav('tabelas',{clienteId:'${c.id}',clienteNome:${JSON.stringify(c.nome)}})">Tabelas</button>
+            </div></td>
+          </tr>`).join(''):`<tr><td colspan="4"><div class="empty"><p>Nenhum cliente. Clique em "+ Novo cliente" para começar.</p></div></td></tr>`}
+        </tbody>
+      </table>
+    </div></div>`;
+}
+
+async function modalCliente(id=null) {
+  const c = id ? await DB.getById('clientes',id) : null;
+  openModal(`<div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">${c?'Editar cliente':'Novo cliente'}</span>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group" style="grid-column:1/-1"><label>Nome do cliente *</label>
+          <input id="f-nome" value="${c?.nome||''}" placeholder="Razão social ou nome fantasia"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Código Brudam <span class="text-muted">(para integração API)</span></label>
+          <input id="f-cod" value="${c?.codigo_brudam||''}" placeholder="Ex.: 000042"></div>
+        <div class="form-group"><label>Status</label>
+          <select id="f-status">
+            <option value="ativo" ${(!c||c.status==='ativo')?'selected':''}>Ativo</option>
+            <option value="inativo" ${c?.status==='inativo'?'selected':''}>Inativo</option>
+          </select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      ${c?`<button class="btn btn-danger" onclick="deleteCliente('${c.id}')">Excluir</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveCliente('${id||''}')">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveCliente(id) {
+  const nome=document.getElementById('f-nome').value.trim();
+  if(!nome){toast('Informe o nome do cliente','danger');return;}
+  const data={nome,codigo_brudam:document.getElementById('f-cod').value.trim()||null,status:document.getElementById('f-status').value};
+  try{ if(id) await DB.update('clientes',id,data); else await DB.insert('clientes',data);
+    closeModal(); toast('Cliente salvo'); renderClientes(); }
+  catch(e){toast(e.message||'Erro ao salvar','danger');}
+}
+
+async function deleteCliente(id){
+  if(!confirm('Excluir este cliente? As tabelas e dados vinculados também serão excluídos.')) return;
+  await DB.delete('clientes',id); closeModal(); toast('Cliente excluído'); renderClientes();
+}
+
+// ═══════════════════════════════════════════════════════════
+// TABELAS
+// ═══════════════════════════════════════════════════════════
+async function renderTabelas() {
+  const fCliente=pageParams.clienteId||'';
+  const fNome=pageParams.clienteNome||'';
+  const clientes=await DB.getAll('clientes',{status:'ativo'});
+  const tabelas=fCliente?await DB.getAll('tabelas_frete',{cliente_id:fCliente}):await DB.getAll('tabelas_frete');
+  const clienteMap={};
+  clientes.forEach(c=>clienteMap[c.id]=c.nome);
+  const hoje=new Date().toISOString().split('T')[0];
+  function vigBadge(t){
+    if(t.vigencia_fim<hoje) return '<span class="badge badge-gray">Encerrada</span>';
+    if(t.vigencia_inicio>hoje) return '<span class="badge badge-blue">Futura</span>';
+    return '<span class="badge badge-green">Vigente</span>';
+  }
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Tabelas de frete</div>
+        <div class="page-subtitle">${fNome?'Cliente: '+fNome:tabelas.length+' tabela(s)'}</div></div>
+      <div class="flex-gap">
+        ${fCliente?`<button class="btn btn-secondary" onclick="nav('tabelas')">Ver todas</button>`:''}
+        <button class="btn btn-primary" onclick="modalTabela()">+ Nova tabela</button>
+      </div>
+    </div>
+    ${!fCliente?`<div class="card" style="padding:.75rem 1rem;margin-bottom:1rem">
+      <div class="flex-gap">
+        <label style="font-size:13px;color:var(--gray-600);white-space:nowrap">Filtrar cliente:</label>
+        <select style="padding:5px 10px;border:1px solid var(--gray-300);border-radius:var(--r);font-size:13px"
+          onchange="if(this.value){const o=JSON.parse(this.value);nav('tabelas',{clienteId:o.id,clienteNome:o.nome})}else nav('tabelas')">
+          <option value="">Todos os clientes</option>
+          ${clientes.map(c=>`<option value='${JSON.stringify({id:c.id,nome:c.nome})}'>${c.nome}</option>`).join('')}
+        </select>
+      </div></div>`:''}
+    <div class="card" style="padding:0"><div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Nome</th><th>Cód. Brudam</th><th>Cliente</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${tabelas.length?tabelas.map(t=>`
+          <tr>
+            <td class="fw-600 mono">${t.nome}</td>
+            <td class="mono">${t.codigo_brudam||'—'}</td>
+            <td>${clienteMap[t.cliente_id]||'—'}</td>
+            <td>${fmtDate(t.vigencia_inicio)} → ${fmtDate(t.vigencia_fim)}</td>
+            <td>${vigBadge(t)}</td>
+            <td><div class="actions">
+              <button class="btn btn-sm btn-secondary" onclick="modalTabela('${t.id}')">Editar</button>
+              <button class="btn btn-sm btn-primary" onclick="nav('trechos',{tabelaId:'${t.id}',tabelaNome:${JSON.stringify(t.nome)},clienteNome:${JSON.stringify(clienteMap[t.cliente_id]||'')}})">Trechos</button>
+            </div></td>
+          </tr>`).join(''):`<tr><td colspan="6"><div class="empty"><p>Nenhuma tabela cadastrada.</p></div></td></tr>`}
+        </tbody>
+      </table>
+    </div></div>`;
+}
+
+async function modalTabela(id=null){
+  const t=id?await DB.getById('tabelas_frete',id):null;
+  const clientes=await DB.getAll('clientes',{status:'ativo'});
+  openModal(`<div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">${t?'Editar tabela':'Nova tabela de frete'}</span>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>Nome da tabela *</label>
+          <input id="t-nome" value="${t?.nome||''}" placeholder="TAB-2026-CLIENTE-V1"></div>
+        <div class="form-group"><label>Código Brudam da tabela</label>
+          <input id="t-cod" value="${t?.codigo_brudam||''}" placeholder="TB_0018"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Cliente *</label>
+          <select id="t-cli">
+            <option value="">Selecione...</option>
+            ${clientes.map(c=>`<option value="${c.id}" ${t?.cliente_id===c.id?'selected':''}>${c.nome}</option>`).join('')}
+          </select></div>
+        <div class="form-group"><label>Modalidade</label>
+          <select id="t-mod">
+            <option value="rodoviario" ${(!t||t.modalidade==='rodoviario')?'selected':''}>Rodoviário</option>
+            <option value="aereo" ${t?.modalidade==='aereo'?'selected':''}>Aéreo</option>
+          </select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Vigência — início *</label>
+          <input type="date" id="t-ini" value="${t?.vigencia_inicio||''}"></div>
+        <div class="form-group"><label>Vigência — fim *</label>
+          <input type="date" id="t-fim" value="${t?.vigencia_fim||''}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      ${t?`<button class="btn btn-danger" onclick="deleteTabela('${t.id}')">Excluir</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveTabela('${id||''}')">Salvar</button>
+    </div>
+  </div>`);
+}
+
+async function saveTabela(id){
+  const nome=document.getElementById('t-nome').value.trim();
+  const cli =document.getElementById('t-cli').value;
+  const ini =document.getElementById('t-ini').value;
+  const fim =document.getElementById('t-fim').value;
+  if(!nome||!cli||!ini||!fim){toast('Preencha todos os campos obrigatórios','danger');return;}
+  if(fim<ini){toast('Data fim deve ser >= data início','danger');return;}
+  const data={nome,codigo_brudam:document.getElementById('t-cod').value.trim()||null,
+              cliente_id:cli,modalidade:document.getElementById('t-mod').value,
+              vigencia_inicio:ini,vigencia_fim:fim};
+  try{ if(id) await DB.update('tabelas_frete',id,data); else await DB.insert('tabelas_frete',data);
+    closeModal(); toast('Tabela salva'); renderTabelas(); }
+  catch(e){toast(e.message||'Erro','danger');}
+}
+
+async function deleteTabela(id){
+  if(!confirm('Excluir tabela? Os trechos vinculados também serão excluídos.')) return;
+  await DB.delete('tabelas_frete',id); closeModal(); toast('Tabela excluída'); renderTabelas();
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRECHOS
+// ═══════════════════════════════════════════════════════════
+async function renderTrechos(){
+  const {tabelaId,tabelaNome,clienteNome}=pageParams;
+  if(!tabelaId){nav('tabelas');return;}
+  const trechos=await DB.getAll('trechos',{tabela_id:tabelaId});
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div>
+        <button class="btn btn-sm btn-secondary" onclick="nav('tabelas')" style="margin-bottom:.5rem">← Tabelas</button>
+        <div class="page-title">${tabelaNome||'Tabela'}</div>
+        <div class="page-subtitle">${clienteNome||''} · ${trechos.length} trecho(s)</div>
+      </div>
+      <button class="btn btn-primary" onclick="modalTrecho('${tabelaId}')">+ Novo trecho</button>
+    </div>
+    <div class="card" style="padding:0"><div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Rota</th><th>Tipo</th><th>Tarifa</th><th>Mínimo</th><th>Ad val.</th><th>GRIS</th><th>Pedágio/100kg</th><th>ICMS</th><th>Prazo</th><th>Ações</th></tr></thead>
+        <tbody>${trechos.length?trechos.map(t=>{
+          let tar='—';
+          if(t.tipo_tarifa==='pct_nf') tar=`${t.pct_nf}% NF`;
+          else if(t.tipo_tarifa==='m3') tar=`${fmtM(t.tarifa_m3)}/m³`;
+          else if(t.tipo_tarifa==='min_excedente') tar=`${fmtM(t.tarifa_excedente)}/kg exc.`;
+          else if(t.tipo_tarifa==='faixas') tar='Por faixas';
+          return `<tr>
+            <td class="fw-600">${t.uf_origem} → ${t.uf_destino}</td>
+            <td>${tipoBadge(t.tipo_tarifa)}</td><td>${tar}</td>
+            <td>${fmtM(t.frete_minimo)}</td>
+            <td>${t.pct_advalorem||0}%</td><td>${t.pct_gris||0}%</td>
+            <td>${fmtM(t.pedagio_por_100kg)}</td><td>${t.icms||0}%</td>
+            <td>${t.prazo_dias||0}d</td>
+            <td><button class="btn btn-sm btn-secondary" onclick="modalTrecho('${tabelaId}','${t.id}')">Editar</button></td>
+          </tr>`;}).join(''):`<tr><td colspan="10"><div class="empty"><p>Nenhum trecho. Adicione as rotas desta tabela.</p></div></td></tr>`}
+        </tbody>
+      </table>
+    </div></div>`;
+}
+
+async function modalTrecho(tabelaId,id=null){
+  const t=id?await DB.getById('trechos',id):null;
+  const faixas=id?await DB.getAll('faixas_peso',{trecho_id:id}):[];
+  faixas.sort((a,b)=>parseFloat(a.peso_de)-parseFloat(b.peso_de));
+  const tipo=t?.tipo_tarifa||'pct_nf';
+  const mkUF=(sel)=>UFs.map(u=>`<option value="${u}" ${u===sel?'selected':''}>${u}</option>`).join('');
+
+  openModal(`<div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title">${t?'Editar trecho':'Novo trecho'}</span>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>UF Origem *</label><select id="r-ori">${mkUF(t?.uf_origem)}</select></div>
+        <div class="form-group"><label>UF Destino *</label><select id="r-dst">${mkUF(t?.uf_destino)}</select></div>
+        <div class="form-group"><label>Prazo (dias úteis)</label><input type="number" id="r-pz" value="${t?.prazo_dias||0}" min="0"></div>
+      </div>
+      <div class="section-sep">Tipo de tarifa</div>
+      <div class="flex-gap" style="margin-bottom:1rem;flex-wrap:wrap" id="tipo-btns">
+        ${[['pct_nf','% sobre NF'],['m3','Por m³'],['min_excedente','Mínimo + excedente'],['faixas','Faixas de peso']].map(([v,l])=>
+          `<button type="button" class="btn btn-sm ${tipo===v?'btn-primary':'btn-secondary'}" data-tipo="${v}" onclick="selTipo(this)">${l}</button>`).join('')}
+      </div>
+      <input type="hidden" id="r-tipo" value="${tipo}">
+
+      <div id="bloco-pct_nf" class="tipo-bloco" ${tipo!=='pct_nf'?'style="display:none"':''}>
+        <div class="form-row">
+          <div class="form-group"><label>Percentual sobre NF (%)</label><input type="number" step="0.0001" id="r-pct" value="${t?.pct_nf||''}"></div>
+          <div class="form-group"><label>Frete mínimo (R$)</label><input type="number" step="0.01" id="r-fm1" value="${t?.frete_minimo||''}"></div>
+        </div>
+      </div>
+
+      <div id="bloco-m3" class="tipo-bloco" ${tipo!=='m3'?'style="display:none"':''}>
+        <div class="form-row">
+          <div class="form-group"><label>Tarifa (R$/m³)</label><input type="number" step="0.01" id="r-tm3" value="${t?.tarifa_m3||''}"></div>
+          <div class="form-group"><label>Fator cubagem (kg/m³)</label><input type="number" step="0.01" id="r-fc" value="${t?.fator_cubagem||300}"></div>
+          <div class="form-group"><label>Frete mínimo (R$)</label><input type="number" step="0.01" id="r-fm2" value="${t?.frete_minimo||''}"></div>
+        </div>
+      </div>
+
+      <div id="bloco-min_excedente" class="tipo-bloco" ${tipo!=='min_excedente'?'style="display:none"':''}>
+        <div class="form-row">
+          <div class="form-group"><label>Frete mínimo (R$)</label><input type="number" step="0.01" id="r-fm3" value="${t?.frete_minimo||''}"></div>
+          <div class="form-group"><label>Peso mínimo (kg)</label><input type="number" step="0.001" id="r-pm" value="${t?.peso_minimo||''}"></div>
+          <div class="form-group"><label>Tarifa excedente (R$/kg)</label><input type="number" step="0.0001" id="r-te" value="${t?.tarifa_excedente||''}"></div>
+        </div>
+      </div>
+
+      <div id="bloco-faixas" class="tipo-bloco" ${tipo!=='faixas'?'style="display:none"':''}>
+        <table class="faixas-table">
+          <thead><tr><th>De (kg)</th><th>Até (kg)</th><th>Tarifa R$/kg</th><th>Mínimo R$</th><th></th></tr></thead>
+          <tbody id="faixas-body">
+            ${faixas.length?faixas.map(f=>`<tr>
+              <td><input type="number" step="0.001" value="${f.peso_de}" class="fp-de"></td>
+              <td><input type="number" step="0.001" value="${f.peso_ate}" class="fp-ate"></td>
+              <td><input type="number" step="0.0001" value="${f.tarifa_kg}" class="fp-tk"></td>
+              <td><input type="number" step="0.01" value="${f.minimo_faixa||0}" class="fp-min"></td>
+              <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">×</button></td>
+            </tr>`).join(''):`<tr>
+              <td><input type="number" step="0.001" value="0" class="fp-de"></td>
+              <td><input type="number" step="0.001" value="30" class="fp-ate"></td>
+              <td><input type="number" step="0.0001" value="" class="fp-tk"></td>
+              <td><input type="number" step="0.01" value="0" class="fp-min"></td>
+              <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">×</button></td>
+            </tr>`}
+          </tbody>
+        </table>
+        <button type="button" class="btn btn-sm btn-secondary" style="margin-top:.5rem" onclick="addFaixaRow()">+ Faixa</button>
+      </div>
+
+      <div class="section-sep" style="margin-top:1.25rem">Taxas adicionais (aplicam a todos os tipos)</div>
+      <div class="form-row">
+        <div class="form-group"><label>Ad valorem (% NF)</label><input type="number" step="0.0001" id="r-av" value="${t?.pct_advalorem||0}"></div>
+        <div class="form-group"><label>GRIS (% NF)</label><input type="number" step="0.0001" id="r-gr" value="${t?.pct_gris||0}"></div>
+        <div class="form-group"><label>Pedágio (R$/100kg)</label><input type="number" step="0.01" id="r-ped" value="${t?.pedagio_por_100kg||0}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>TDA (R$ fixo)</label><input type="number" step="0.01" id="r-tda" value="${t?.tda||0}"></div>
+        <div class="form-group"><label>ICMS (%)</label><input type="number" step="0.0001" id="r-icms" value="${t?.icms||0}"></div>
+        <div class="form-group"><label>ISS (%)</label><input type="number" step="0.0001" id="r-iss" value="${t?.iss||0}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      ${t?`<button class="btn btn-danger" onclick="deleteTrecho('${t.id}')">Excluir</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveTrecho('${tabelaId}','${id||''}')">Salvar</button>
+    </div>
+  </div>`);
+}
+
+function selTipo(btn){
+  const tipo=btn.dataset.tipo;
+  document.getElementById('r-tipo').value=tipo;
+  document.querySelectorAll('#tipo-btns button').forEach(b=>{
+    b.classList.remove('btn-primary'); b.classList.add('btn-secondary');
+  });
+  btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary');
+  document.querySelectorAll('.tipo-bloco').forEach(b=>b.style.display='none');
+  document.getElementById('bloco-'+tipo).style.display='block';
+}
+
+function addFaixaRow(){
+  const tb=document.getElementById('faixas-body');
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td><input type="number" step="0.001" class="fp-de"></td>
+    <td><input type="number" step="0.001" class="fp-ate"></td>
+    <td><input type="number" step="0.0001" class="fp-tk"></td>
+    <td><input type="number" step="0.01" value="0" class="fp-min"></td>
+    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">×</button></td>`;
+  tb.appendChild(tr);
+}
+
+async function saveTrecho(tabelaId,id){
+  const tipo=document.getElementById('r-tipo').value;
+  const ori =document.getElementById('r-ori').value;
+  const dst =document.getElementById('r-dst').value;
+  if(ori===dst){toast('Origem e destino não podem ser iguais','danger');return;}
+  const base={tabela_id:tabelaId,uf_origem:ori,uf_destino:dst,
+    prazo_dias:parseInt(document.getElementById('r-pz').value)||0,
+    tipo_tarifa:tipo,frete_minimo:0,
+    pct_advalorem:parseFloat(document.getElementById('r-av').value)||0,
+    pct_gris:parseFloat(document.getElementById('r-gr').value)||0,
+    pedagio_por_100kg:parseFloat(document.getElementById('r-ped').value)||0,
+    tda:parseFloat(document.getElementById('r-tda').value)||0,
+    icms:parseFloat(document.getElementById('r-icms').value)||0,
+    iss:parseFloat(document.getElementById('r-iss').value)||0};
+  if(tipo==='pct_nf'){base.pct_nf=parseFloat(document.getElementById('r-pct').value)||0;base.frete_minimo=parseFloat(document.getElementById('r-fm1').value)||0;}
+  else if(tipo==='m3'){base.tarifa_m3=parseFloat(document.getElementById('r-tm3').value)||0;base.fator_cubagem=parseFloat(document.getElementById('r-fc').value)||300;base.frete_minimo=parseFloat(document.getElementById('r-fm2').value)||0;}
+  else if(tipo==='min_excedente'){base.frete_minimo=parseFloat(document.getElementById('r-fm3').value)||0;base.peso_minimo=parseFloat(document.getElementById('r-pm').value)||0;base.tarifa_excedente=parseFloat(document.getElementById('r-te').value)||0;}
+  try{
+    let tid=id;
+    if(id) await DB.update('trechos',id,base);
+    else { const n=await DB.insert('trechos',base); tid=n.id; }
+    if(tipo==='faixas'){
+      await DB.deleteBulk('faixas_peso','trecho_id',tid);
+      let ord=0;
+      for(const row of document.querySelectorAll('#faixas-body tr')){
+        const de=parseFloat(row.querySelector('.fp-de')?.value)||0;
+        const ate=parseFloat(row.querySelector('.fp-ate')?.value)||0;
+        const tk=parseFloat(row.querySelector('.fp-tk')?.value)||0;
+        const mn=parseFloat(row.querySelector('.fp-min')?.value)||0;
+        if(tk>0) await DB.insert('faixas_peso',{trecho_id:tid,peso_de:de,peso_ate:ate,tarifa_kg:tk,minimo_faixa:mn,ordem:ord++});
+      }
+    }
+    closeModal(); toast('Trecho salvo'); nav('trechos',pageParams);
+  }catch(e){toast(e.message||'Erro','danger');}
+}
+
+async function deleteTrecho(id){
+  if(!confirm('Excluir este trecho?')) return;
+  await DB.deleteBulk('faixas_peso','trecho_id',id);
+  await DB.delete('trechos',id); closeModal(); toast('Trecho excluído'); nav('trechos',pageParams);
+}
+
+// ═══════════════════════════════════════════════════════════
+// IMPORTAR EXCEL
+// ═══════════════════════════════════════════════════════════
+let importData=null;
+
+const CAMPOS=[
+  {key:'numero_cte',label:'Número CTe',req:false},
+  {key:'numero_nf',label:'Número NF',req:false},
+  {key:'uf_origem',label:'UF Origem',req:true},
+  {key:'uf_destino',label:'UF Destino',req:true},
+  {key:'peso_real',label:'Peso real (kg)',req:true},
+  {key:'volume_m3',label:'Volume (m³)',req:false},
+  {key:'valor_nf',label:'Valor NF (R$)',req:true},
+  {key:'valor_frete_cobrado',label:'Frete cobrado (R$)',req:true},
+  {key:'dt_emissao',label:'Data emissão',req:true},
+];
+
+async function renderImportar(){
+  const [clientes,importacoes]=await Promise.all([DB.getAll('clientes',{status:'ativo'}),DB.getAll('importacoes')]);
+  const clienteMap={};
+  clientes.forEach(c=>clienteMap[c.id]=c.nome);
+
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Importar Excel</div><div class="page-subtitle">Carregue a base de fretes para auditoria</div></div>
+    </div>
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTabImp(this,'ti-new')">Nova importação</div>
+        <div class="tab" onclick="switchTabImp(this,'ti-hist')">Histórico</div>
+      </div>
+      <div id="ti-new">
+        <div class="form-row">
+          <div class="form-group"><label>Cliente *</label>
+            <select id="imp-cli"><option value="">Selecione...</option>
+              ${clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Período de referência</label>
+            <input type="month" id="imp-periodo"></div>
+        </div>
+        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          <p>Arraste .xlsx ou .csv aqui</p><small>ou clique para selecionar</small>
+        </div>
+        <div id="mapping-area" style="display:none;margin-top:1.25rem">
+          <div class="section-sep">Mapeamento de colunas</div>
+          <div class="alert alert-info">Associe cada campo do sistema à coluna do seu arquivo. Campos com * são obrigatórios.</div>
+          <div id="mapping-rows"></div>
+          <div id="preview-area" style="margin-top:1rem"></div>
+          <div style="margin-top:1rem;display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="confirmarImportacao()">Importar dados</button>
+            <button class="btn btn-secondary" onclick="cancelarImport()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+      <div id="ti-hist" style="display:none">
+        ${importacoes.length?`<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Data</th><th>Cliente</th><th>Arquivo</th><th>Período</th><th>Linhas</th></tr></thead>
+          <tbody>${importacoes.map(i=>`<tr>
+            <td>${fmtDate(i.created_at?.split('T')[0])}</td>
+            <td>${clienteMap[i.cliente_id]||'—'}</td>
+            <td class="mono">${i.nome_arquivo||'—'}</td>
+            <td>${i.periodo_referencia||'—'}</td>
+            <td><span class="badge badge-blue">${i.total_linhas}</span></td>
+          </tr>`).join('')}</tbody></table></div>`:
+          '<div class="empty"><p>Nenhuma importação ainda</p></div>'}
+      </div>
+    </div>`;
+
+  // Drag and drop
+  const zone=document.getElementById('drop-zone');
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag')});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)processFile(f);});
+}
+
+function switchTabImp(el,id){
+  document.querySelectorAll('.card .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['ti-new','ti-hist'].forEach(p=>{const el=document.getElementById(p);if(el)el.style.display='none';});
+  document.getElementById(id).style.display='block';
+}
+
+function handleFile(e){processFile(e.target.files[0]);}
+
+function processFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const json=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'YYYY-MM-DD'});
+      if(json.length<2){toast('Arquivo sem dados','danger');return;}
+      const headers=json[0].map(h=>String(h||'').trim());
+      const rows=json.slice(1).filter(r=>r.some(c=>c!=null&&c!==''));
+      importData={headers,rows,filename:file.name};
+      renderMapping(headers);
+    }catch(ex){toast('Erro ao ler: '+ex.message,'danger');}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function autoMatch(campo,headers){
+  const key=campo.key.toLowerCase().replace(/_/g,'');
+  for(const h of headers){const hk=h.toLowerCase().replace(/[^a-z0-9]/g,'');if(hk===key||hk.includes(key)||key.includes(hk))return h;}
+  return '';
+}
+
+function renderMapping(headers){
+  document.getElementById('mapping-area').style.display='block';
+  const opts=`<option value="">— ignorar —</option>${headers.map(h=>`<option value="${h}">${h}</option>`).join('')}`;
+  document.getElementById('mapping-rows').innerHTML=CAMPOS.map(c=>{
+    const m=autoMatch(c,headers);
+    return `<div class="map-row">
+      <div class="map-field">${c.label}${c.req?' *':''}</div>
+      <div class="map-arrow">→</div>
+      <select id="map-${c.key}" style="font-size:12px;padding:5px 8px;border:1px solid var(--gray-300);border-radius:var(--r)">
+        ${opts.replace(`value="${m}"`,`value="${m}" selected`)}
+      </select></div>`;
+  }).join('');
+  const {rows}=importData;
+  document.getElementById('preview-area').innerHTML=`
+    <div class="section-sep">Preview (primeiras 3 linhas)</div>
+    <div class="table-wrap"><table class="data-table" style="font-size:12px">
+      <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0,3).map(r=>`<tr>${headers.map((_,i)=>`<td>${r[i]||''}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>`;
+}
+
+function cancelarImport(){importData=null;document.getElementById('mapping-area').style.display='none';document.getElementById('file-input').value='';}
+
+function parseNum(v){if(v==null||v==='') return null;return parseFloat(String(v).replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.'))||null;}
+function parseData(v){
+  if(!v) return null;
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+  if(/^\d{2}\/\d{2}\/\d{4}/.test(s)){const p=s.split('/');return p[2]+'-'+p[1]+'-'+p[0];}
+  if(/^\d{2}\/\d{2}\/\d{2}$/.test(s)){const p=s.split('/');return '20'+p[2]+'-'+p[1]+'-'+p[0];}
+  return null;
+}
+
+async function confirmarImportacao(){
+  const cliId=document.getElementById('imp-cli').value;
+  if(!cliId){toast('Selecione o cliente','danger');return;}
+  if(!importData){toast('Selecione um arquivo','danger');return;}
+  const mapa={};
+  for(const c of CAMPOS){const s=document.getElementById('map-'+c.key);if(s)mapa[c.key]=s.value||null;}
+  for(const c of CAMPOS.filter(x=>x.req)){if(!mapa[c.key]){toast(`Campo obrigatório não mapeado: ${c.label}`,'danger');return;}}
+  const {headers,rows,filename}=importData;
+  function gv(row,campo){const col=mapa[campo];if(!col)return null;const i=headers.indexOf(col);return i>=0&&row[i]!=null&&row[i]!==''?String(row[i]).trim():null;}
+  try{
+    const imp=await DB.insert('importacoes',{cliente_id:cliId,
+      periodo_referencia:document.getElementById('imp-periodo').value||null,
+      nome_arquivo:filename,total_linhas:rows.length,mapeamento:mapa});
+    for(const row of rows){
+      await DB.insert('linhas_importacao',{importacao_id:imp.id,
+        numero_cte:gv(row,'numero_cte'),numero_nf:gv(row,'numero_nf'),
+        uf_origem:(gv(row,'uf_origem')||'').toUpperCase().replace(/\s/g,''),
+        uf_destino:(gv(row,'uf_destino')||'').toUpperCase().replace(/\s/g,''),
+        peso_real:parseNum(gv(row,'peso_real')),volume_m3:parseNum(gv(row,'volume_m3')),
+        valor_nf:parseNum(gv(row,'valor_nf')),valor_frete_cobrado:parseNum(gv(row,'valor_frete_cobrado')),
+        dt_emissao:parseData(gv(row,'dt_emissao'))});
+    }
+    cancelarImport(); toast(`${rows.length} linhas importadas!`); renderImportar();
+  }catch(ex){toast('Erro: '+ex.message,'danger');}
+}
+
+// ═══════════════════════════════════════════════════════════
+// MOTOR DE AUDITORIA
+// ═══════════════════════════════════════════════════════════
+function calcularFrete(trecho,faixas,linha){
+  const peso=parseFloat(linha.peso_real)||0;
+  const valNF=parseFloat(linha.valor_nf)||0;
+  const vol=parseFloat(linha.volume_m3)||0;
+  let freteBase=0,det='';
+
+  switch(trecho.tipo_tarifa){
+    case 'pct_nf':{
+      const c=valNF*(parseFloat(trecho.pct_nf)||0)/100;
+      freteBase=Math.max(c,parseFloat(trecho.frete_minimo)||0);
+      det=`${trecho.pct_nf}%×${fmtM(valNF)}=${fmtM(c)}`; break;}
+    case 'm3':{
+      const pc=vol*(parseFloat(trecho.fator_cubagem)||300);
+      const pt=Math.max(peso,pc);
+      const c=pt*(parseFloat(trecho.tarifa_m3)||0);
+      freteBase=Math.max(c,parseFloat(trecho.frete_minimo)||0);
+      det=`${fmtM(trecho.tarifa_m3)}/m³,cub=${fmtN(pc)}kg`; break;}
+    case 'min_excedente':{
+      const pm=parseFloat(trecho.peso_minimo)||0;
+      const fm=parseFloat(trecho.frete_minimo)||0;
+      if(peso<=pm){freteBase=fm;det=`Mín(${pm}kg)=${fmtM(fm)}`;}
+      else{const ex=peso-pm;freteBase=fm+ex*(parseFloat(trecho.tarifa_excedente)||0);
+        det=`Mín${fmtM(fm)}+${fmtN(ex)}kg×${fmtM(trecho.tarifa_excedente)}`;}
+      break;}
+    case 'faixas':{
+      const f=faixas.find(x=>peso>=parseFloat(x.peso_de)&&peso<=parseFloat(x.peso_ate));
+      if(!f)return{erro:`${fmtN(peso)}kg fora das faixas cadastradas`,freteCalculado:0};
+      const c=peso*(parseFloat(f.tarifa_kg)||0);
+      freteBase=Math.max(c,parseFloat(f.minimo_faixa)||0);
+      det=`Faixa ${f.peso_de}–${f.peso_ate}kg:${fmtN(peso)}×${fmtM(f.tarifa_kg)}`; break;}
+  }
+  const adv=valNF*(parseFloat(trecho.pct_advalorem)||0)/100;
+  const gr =valNF*(parseFloat(trecho.pct_gris)||0)/100;
+  const ped=Math.ceil(peso/100)*(parseFloat(trecho.pedagio_por_100kg)||0);
+  const tda=parseFloat(trecho.tda)||0;
+  const sub=freteBase+adv+gr+ped+tda;
+  const icm=(parseFloat(trecho.icms)||0)/100;
+  const tot=icm>0?sub/(1-icm):sub;
+  return{freteBase:r2(freteBase),adValorem:r2(adv),gris:r2(gr),pedagio:r2(ped),tda:r2(tda),subtotal:r2(sub),freteCalculado:r2(tot),det};
+}
+function r2(v){return Math.round(v*100)/100;}
+
+// ═══════════════════════════════════════════════════════════
+// AUDITORIA — TELA
+// ═══════════════════════════════════════════════════════════
+async function renderAuditoria(){
+  const [clientes,importacoes,auditorias]=await Promise.all([
+    DB.getAll('clientes',{status:'ativo'}),DB.getAll('importacoes'),DB.getAll('auditorias')]);
+  const clienteMap={};clientes.forEach(c=>clienteMap[c.id]=c.nome);
+
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Auditoria</div><div class="page-subtitle">Compare fretes cobrados com a tabela vigente</div></div>
+    </div>
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTabAud(this,'ta-new')">Nova auditoria</div>
+        <div class="tab" onclick="switchTabAud(this,'ta-hist')">Histórico</div>
+      </div>
+      <div id="ta-new">
+        <div class="form-row">
+          <div class="form-group"><label>Cliente *</label>
+            <select id="a-cli" onchange="filtrarImps()">
+              <option value="">Selecione...</option>
+              ${clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}
+            </select></div>
+          <div class="form-group"><label>Importação *</label>
+            <select id="a-imp" onchange="verificarTabVig()"><option value="">Selecione o cliente primeiro</option></select></div>
+          <div class="form-group"><label>Tolerância</label>
+            <select id="a-tol">
+              <option value="0">0% — Exato</option><option value="0.5">± 0,5%</option>
+              <option value="1">± 1%</option><option value="2">± 2%</option><option value="5">± 5%</option>
+            </select></div>
+        </div>
+        <div id="tabela-detectada" style="display:none;margin-bottom:1rem"></div>
+        <button class="btn btn-success" onclick="executarAuditoria()">▶ Executar auditoria</button>
+        <div id="aud-progress" style="display:none;margin-top:1rem">
+          <div style="font-size:13px;color:var(--gray-600)" id="aud-prog-txt">Processando...</div>
+          <div class="progress-bar"><div class="progress-fill" id="aud-prog-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div id="ta-hist" style="display:none">
+        ${auditorias.length?`<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Data</th><th>Cliente</th><th>Linhas</th><th>Conformidade</th><th>Divergência</th><th></th></tr></thead>
+          <tbody>${auditorias.map(a=>{
+            const pct=a.total_linhas>0?(a.total_conformes/a.total_linhas*100).toFixed(1):'0';
+            return `<tr>
+              <td>${fmtDate(a.created_at?.split('T')[0])}</td>
+              <td>${clienteMap[a.cliente_id]||'—'}</td>
+              <td>${a.total_linhas}</td>
+              <td><span class="badge ${parseFloat(pct)>=90?'badge-green':parseFloat(pct)>=70?'badge-amber':'badge-red'}">${pct}%</span></td>
+              <td class="text-danger fw-600">${fmtM(a.valor_divergencia)}</td>
+              <td><button class="btn btn-sm btn-secondary" onclick="nav('resultado',{auditoriaId:'${a.id}'})">Ver</button></td>
+            </tr>`;
+          }).join('')}</tbody></table></div>`:
+          '<div class="empty"><p>Nenhuma auditoria ainda</p></div>'}
+      </div>
+    </div>`;
+  window._allImps=importacoes;
+}
+
+function switchTabAud(el,id){
+  document.querySelectorAll('.card .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['ta-new','ta-hist'].forEach(p=>{const e=document.getElementById(p);if(e)e.style.display='none';});
+  document.getElementById(id).style.display='block';
+}
+
+async function filtrarImps(){
+  const cliId=document.getElementById('a-cli').value;
+  const sel=document.getElementById('a-imp');
+  sel.innerHTML='<option value="">Selecione...</option>';
+  document.getElementById('tabela-detectada').style.display='none';
+  if(!cliId) return;
+  (window._allImps||[]).filter(i=>i.cliente_id===cliId).forEach(i=>{
+    const o=document.createElement('option');
+    o.value=i.id;
+    o.textContent=`${i.periodo_referencia||'Sem período'} — ${i.nome_arquivo||'arquivo'} (${i.total_linhas} linhas)`;
+    sel.appendChild(o);
+  });
+}
+
+async function verificarTabVig(){
+  const cliId=document.getElementById('a-cli').value;
+  const impId=document.getElementById('a-imp').value;
+  const el=document.getElementById('tabela-detectada');
+  if(!cliId||!impId){el.style.display='none';return;}
+  const imp=await DB.getById('importacoes',impId);
+  const linhas=await DB.getAll('linhas_importacao',{importacao_id:impId});
+  const datas=linhas.map(l=>l.dt_emissao).filter(Boolean).sort();
+  const dtRef=datas[0]||(imp?.periodo_referencia?imp.periodo_referencia+'-01':null)||new Date().toISOString().split('T')[0];
+  const tabelas=await DB.getAll('tabelas_frete',{cliente_id:cliId});
+  const vig=tabelas.filter(t=>t.vigencia_inicio<=dtRef&&t.vigencia_fim>=dtRef);
+  el.className=vig.length?'alert alert-success':'alert alert-warn';
+  el.innerHTML=vig.length?`<strong>Tabela detectada:</strong> ${vig[0].nome} (${fmtDate(vig[0].vigencia_inicio)} → ${fmtDate(vig[0].vigencia_fim)})`
+    :`<strong>Atenção:</strong> Nenhuma tabela vigente encontrada para ${fmtDate(dtRef)}. As linhas receberão status "Sem tabela".`;
+  el.style.display='block';
+}
+
+async function executarAuditoria(){
+  const cliId=document.getElementById('a-cli').value;
+  const impId=document.getElementById('a-imp').value;
+  const tol=parseFloat(document.getElementById('a-tol').value)||0;
+  if(!cliId||!impId){toast('Selecione cliente e importação','danger');return;}
+  const prog=document.getElementById('aud-progress');
+  const progTxt=document.getElementById('aud-prog-txt');
+  const progBar=document.getElementById('aud-prog-bar');
+  prog.style.display='block';
+  try{
+    const linhas=await DB.getAll('linhas_importacao',{importacao_id:impId});
+    if(!linhas.length){toast('Importação sem linhas','danger');prog.style.display='none';return;}
+    const tabelas=await DB.getAll('tabelas_frete',{cliente_id:cliId});
+    const todosT=await DB.getAll('trechos');
+    const todasF=await DB.getAll('faixas_peso');
+    const resultados=[];
+    let conformes=0,divergentes=0,totCob=0,totCalc=0,totDiv=0,tabelaUsada=null;
+
+    for(let i=0;i<linhas.length;i++){
+      const l=linhas[i];
+      const pct=Math.round(((i+1)/linhas.length)*100);
+      progTxt.textContent=`Processando ${i+1} de ${linhas.length}...`;
+      progBar.style.width=pct+'%';
+      if(i%30===0) await new Promise(r=>setTimeout(r,0));
+
+      const dt=l.dt_emissao;
+      const tvigs=tabelas.filter(t=>!dt||(t.vigencia_inicio<=dt&&t.vigencia_fim>=dt))
+                         .sort((a,b)=>b.vigencia_inicio.localeCompare(a.vigencia_inicio));
+      if(!tvigs.length){
+        resultados.push({linha_id:l.id,numero_cte:l.numero_cte,numero_nf:l.numero_nf,
+          uf_origem:l.uf_origem,uf_destino:l.uf_destino,peso_real:l.peso_real,volume_m3:l.volume_m3,
+          valor_nf:l.valor_nf,frete_cobrado:l.valor_frete_cobrado,frete_calculado:0,
+          diferenca:parseFloat(l.valor_frete_cobrado)||0,pct_diferenca:100,status:'sem_tabela',
+          detalhes:{msg:'Sem tabela vigente em '+dt}});
+        divergentes++;totCob+=parseFloat(l.valor_frete_cobrado)||0;continue;
+      }
+      const tab=tvigs[0];
+      if(!tabelaUsada)tabelaUsada=tab;
+      const tLista=todosT.filter(t=>t.tabela_id===tab.id&&t.uf_origem===l.uf_origem&&t.uf_destino===l.uf_destino);
+      if(!tLista.length){
+        resultados.push({linha_id:l.id,numero_cte:l.numero_cte,numero_nf:l.numero_nf,
+          uf_origem:l.uf_origem,uf_destino:l.uf_destino,peso_real:l.peso_real,volume_m3:l.volume_m3,
+          valor_nf:l.valor_nf,frete_cobrado:l.valor_frete_cobrado,frete_calculado:0,
+          diferenca:parseFloat(l.valor_frete_cobrado)||0,pct_diferenca:100,tipo_tarifa:null,status:'sem_trecho',
+          detalhes:{msg:`Rota ${l.uf_origem}→${l.uf_destino} não em ${tab.nome}`}});
+        divergentes++;totCob+=parseFloat(l.valor_frete_cobrado)||0;continue;
+      }
+      const trecho=tLista[0];
+      const faixas=todasF.filter(f=>f.trecho_id===trecho.id).sort((a,b)=>parseFloat(a.peso_de)-parseFloat(b.peso_de));
+      const calc=calcularFrete(trecho,faixas,l);
+      if(calc.erro){
+        resultados.push({linha_id:l.id,numero_cte:l.numero_cte,numero_nf:l.numero_nf,
+          uf_origem:l.uf_origem,uf_destino:l.uf_destino,peso_real:l.peso_real,volume_m3:l.volume_m3,
+          valor_nf:l.valor_nf,frete_cobrado:l.valor_frete_cobrado,frete_calculado:0,
+          diferenca:parseFloat(l.valor_frete_cobrado)||0,pct_diferenca:100,tipo_tarifa:trecho.tipo_tarifa,
+          status:'sem_trecho',detalhes:{msg:calc.erro}});
+        divergentes++;totCob+=parseFloat(l.valor_frete_cobrado)||0;continue;
+      }
+      const cob=parseFloat(l.valor_frete_cobrado)||0;
+      const dif=r2(cob-calc.freteCalculado);
+      const pctDif=calc.freteCalculado>0?r2(dif/calc.freteCalculado*100):0;
+      const status=Math.abs(pctDif)<=tol?'conforme':dif>0?'cobrado_a_mais':'cobrado_a_menos';
+      if(status==='conforme')conformes++;else divergentes++;
+      totCob+=cob;totCalc+=calc.freteCalculado;
+      if(status!=='conforme')totDiv+=dif;
+      resultados.push({linha_id:l.id,numero_cte:l.numero_cte,numero_nf:l.numero_nf,
+        uf_origem:l.uf_origem,uf_destino:l.uf_destino,peso_real:l.peso_real,volume_m3:l.volume_m3,
+        valor_nf:l.valor_nf,frete_cobrado:cob,frete_calculado:calc.freteCalculado,
+        diferenca:dif,pct_diferenca:pctDif,tipo_tarifa:trecho.tipo_tarifa,status,
+        detalhes:{base:calc.det,adv:calc.adValorem,gris:calc.gris,ped:calc.pedagio,tda:calc.tda}});
+    }
+    const aud=await DB.insert('auditorias',{cliente_id:cliId,importacao_id:impId,
+      tabela_id:tabelaUsada?.id||null,tolerancia_pct:tol,total_linhas:linhas.length,
+      total_conformes:conformes,total_divergentes:divergentes,
+      valor_total_cobrado:r2(totCob),valor_total_calculado:r2(totCalc),valor_divergencia:r2(Math.abs(totDiv))});
+    for(const res of resultados) await DB.insert('resultados_auditoria',{...res,auditoria_id:aud.id});
+    prog.style.display='none';
+    toast(`Concluída! ${divergentes} divergência(s).`);
+    nav('resultado',{auditoriaId:aud.id});
+  }catch(ex){prog.style.display='none';toast('Erro: '+ex.message,'danger');console.error(ex);}
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESULTADO DA AUDITORIA
+// ═══════════════════════════════════════════════════════════
+async function renderResultado(){
+  const {auditoriaId}=pageParams;
+  if(!auditoriaId){nav('auditoria');return;}
+  const aud=await DB.getById('auditorias',auditoriaId);
+  if(!aud){toast('Auditoria não encontrada','danger');nav('auditoria');return;}
+  const [cl,tab,resultados]=await Promise.all([
+    DB.getById('clientes',aud.cliente_id),
+    aud.tabela_id?DB.getById('tabelas_frete',aud.tabela_id):Promise.resolve(null),
+    DB.getAll('resultados_auditoria',{auditoria_id:auditoriaId})
+  ]);
+  const pct=aud.total_linhas>0?(aud.total_conformes/aud.total_linhas*100).toFixed(1):'0';
+  window._audRes={todos:resultados,divergencias:resultados.filter(r=>r.status!=='conforme'),conformes:resultados.filter(r=>r.status==='conforme')};
+
+  function rows(data){
+    if(!data.length) return '<div class="empty"><p>Nenhum registro</p></div>';
+    const rc=s=>s==='conforme'?'res-ok':s==='cobrado_a_mais'?'res-mais':s==='cobrado_a_menos'?'res-menos':'res-sem';
+    return `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>CTe</th><th>NF</th><th>Rota</th><th>Tipo</th><th>Peso</th><th>Valor NF</th><th>Cobrado</th><th>Calculado</th><th>Diferença</th><th>%</th><th>Status</th></tr></thead>
+      <tbody>${data.map(r=>`<tr class="${rc(r.status)}">
+        <td class="mono">${r.numero_cte||'—'}</td><td class="mono">${r.numero_nf||'—'}</td>
+        <td>${r.uf_origem||'?'}→${r.uf_destino||'?'}</td>
+        <td>${r.tipo_tarifa?tipoBadge(r.tipo_tarifa):'—'}</td>
+        <td>${fmtN(r.peso_real)}kg</td><td>${fmtM(r.valor_nf)}</td>
+        <td>${fmtM(r.frete_cobrado)}</td><td>${fmtM(r.frete_calculado)}</td>
+        <td class="${parseFloat(r.diferenca)>0?'text-danger':parseFloat(r.diferenca)<0?'text-warn':''}">${fmtM(r.diferenca)}</td>
+        <td>${(parseFloat(r.pct_diferenca)||0).toFixed(2)}%</td>
+        <td>${statusBadge(r.status)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  document.getElementById('main-content').innerHTML=`
+    <div class="page-header">
+      <div>
+        <button class="btn btn-sm btn-secondary" onclick="nav('auditoria')" style="margin-bottom:.5rem">← Auditoria</button>
+        <div class="page-title">${cl?.nome||'—'}</div>
+        <div class="page-subtitle">${tab?.nome||'—'} · ${fmtDate(aud.created_at?.split('T')[0])}</div>
+      </div>
+      <button class="btn btn-secondary" onclick="exportarResultado()">↓ Exportar Excel</button>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Auditados</div><div class="metric-value">${aud.total_linhas}</div></div>
+      <div class="metric"><div class="metric-label">Conformes</div><div class="metric-value" style="color:var(--success)">${aud.total_conformes}</div><div class="metric-sub">${pct}%</div></div>
+      <div class="metric"><div class="metric-label">Divergentes</div><div class="metric-value" style="color:var(--danger)">${aud.total_divergentes}</div><div class="metric-sub">${(100-parseFloat(pct)).toFixed(1)}%</div></div>
+      <div class="metric"><div class="metric-label">Total cobrado</div><div class="metric-value" style="font-size:16px">${fmtM(aud.valor_total_cobrado)}</div></div>
+      <div class="metric"><div class="metric-label">Total calculado</div><div class="metric-value" style="font-size:16px">${fmtM(aud.valor_total_calculado)}</div></div>
+      <div class="metric"><div class="metric-label">Divergência total</div><div class="metric-value" style="color:var(--danger);font-size:16px">${fmtM(aud.valor_divergencia)}</div></div>
+    </div>
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:1rem">
+        <div class="flex-gap">
+          <button class="btn btn-sm btn-primary res-filter-btn" data-f="todos" onclick="filtrarRes(this)">Todos (${resultados.length})</button>
+          <button class="btn btn-sm btn-secondary res-filter-btn" data-f="divergencias" onclick="filtrarRes(this)">Divergências (${window._audRes.divergencias.length})</button>
+          <button class="btn btn-sm btn-secondary res-filter-btn" data-f="conformes" onclick="filtrarRes(this)">Conformes (${window._audRes.conformes.length})</button>
+        </div>
+      </div>
+      <div id="res-rows">${rows(resultados)}</div>
+    </div>`;
+  window._resRows=rows;
+}
+
+function filtrarRes(btn){
+  document.querySelectorAll('.res-filter-btn').forEach(b=>{b.className='btn btn-sm btn-secondary res-filter-btn';});
+  btn.className='btn btn-sm btn-primary res-filter-btn';
+  document.getElementById('res-rows').innerHTML=window._resRows(window._audRes[btn.dataset.f]||[]);
+}
+
+async function exportarResultado(){
+  const {auditoriaId}=pageParams;
+  const [resultados,aud]=await Promise.all([DB.getAll('resultados_auditoria',{auditoria_id:auditoriaId}),DB.getById('auditorias',auditoriaId)]);
+  const cl=await DB.getById('clientes',aud.cliente_id);
+  const sL={conforme:'Conforme',cobrado_a_mais:'Cobrado a mais',cobrado_a_menos:'Cobrado a menos',sem_trecho:'Sem trecho',sem_tabela:'Sem tabela'};
+  const ws=XLSX.utils.json_to_sheet(resultados.map(r=>({
+    'CTe':r.numero_cte||'','NF':r.numero_nf||'',
+    'Origem':r.uf_origem||'','Destino':r.uf_destino||'',
+    'Tipo Tarifa':r.tipo_tarifa||'','Peso (kg)':parseFloat(r.peso_real)||0,
+    'Valor NF (R$)':parseFloat(r.valor_nf)||0,
+    'Frete Cobrado (R$)':parseFloat(r.frete_cobrado)||0,
+    'Frete Calculado (R$)':parseFloat(r.frete_calculado)||0,
+    'Diferença (R$)':parseFloat(r.diferenca)||0,
+    'Diferença (%)':parseFloat(r.pct_diferenca)||0,
+    'Status':sL[r.status]||r.status
+  })));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Auditoria');
+  XLSX.writeFile(wb,`SAS_${cl?.nome||'cliente'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  toast('Exportado!');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EVENTOS & INIT
+// ═══════════════════════════════════════════════════════════
+document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('login-email').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pass').focus();});
+checkAuth();
+</script>
+</body>
+</html>
