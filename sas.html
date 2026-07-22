@@ -1088,7 +1088,10 @@ function processFile(file){
 
 function autoMatch(campo,headers){
   const key=campo.key.toLowerCase().replace(/_/g,'');
-  for(const h of headers){const hk=h.toLowerCase().replace(/[^a-z0-9]/g,'');if(hk===key||hk.includes(key)||key.includes(hk))return h;}
+  // 1ª passagem: match exato ou hk contém key (mais específico)
+  for(const h of headers){const hk=h.toLowerCase().replace(/[^a-z0-9]/g,'');if(hk===key||hk.includes(key))return h;}
+  // 2ª passagem: key contém hk (só se hk tiver pelo menos 4 chars, evita matches vagos)
+  for(const h of headers){const hk=h.toLowerCase().replace(/[^a-z0-9]/g,'');if(hk.length>=4&&key.includes(hk))return h;}
   return '';
 }
 
@@ -1115,6 +1118,16 @@ function renderMapping(headers){
 
 function cancelarImport(){importData=null;document.getElementById('mapping-area').style.display='none';document.getElementById('file-input').value='';}
 
+const _UF_BR=new Set(['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']);
+function extrairUF(v){
+  if(!v) return '';
+  const s=String(v).trim().toUpperCase().replace(/\s/g,'');
+  if(s.length===2&&_UF_BR.has(s)) return s;
+  // tenta achar sigla válida como palavra isolada
+  const m=String(v).trim().toUpperCase().match(/\b([A-Z]{2})\b/);
+  if(m&&_UF_BR.has(m[1])) return m[1];
+  return ''; // não guarda nome de empresa como UF
+}
 function parseNum(v){if(v==null||v==='') return null;return parseFloat(String(v).replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.'))||null;}
 function parseData(v){
   if(!v) return null;
@@ -1141,8 +1154,8 @@ async function confirmarImportacao(){
     for(const row of rows){
       await DB.insert('linhas_importacao',{importacao_id:imp.id,
         numero_cte:gv(row,'numero_cte'),numero_nf:gv(row,'numero_nf'),
-        uf_origem:(gv(row,'uf_origem')||'').toUpperCase().replace(/\s/g,''),
-        uf_destino:(gv(row,'uf_destino')||'').toUpperCase().replace(/\s/g,''),
+        uf_origem:extrairUF(gv(row,'uf_origem')),
+        uf_destino:extrairUF(gv(row,'uf_destino')),
         peso_real:parseNum(gv(row,'peso_real')),volume_m3:parseNum(gv(row,'volume_m3')),
         valor_nf:parseNum(gv(row,'valor_nf')),valor_frete_cobrado:parseNum(gv(row,'valor_frete_cobrado')),
         dt_emissao:parseData(gv(row,'dt_emissao'))});
@@ -1836,7 +1849,7 @@ checkAuth();
   padding:4px 8px;z-index:9999;
   font-family:monospace;letter-spacing:.3px;
 ">
-  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:33 (Horário de Brasília)</strong>
+  SAS · Versão publicada em: <strong style="color:#38bdf8">22/07/2026 às 20:48 (Horário de Brasília)</strong>
 </footer>
 <style>#app{padding-bottom:28px}</style>
 </body>
